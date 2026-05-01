@@ -4803,3 +4803,332 @@ PVPKill.Announcer = 1
 # GAME SETTINGS END                                                                               #
 #                                                                                                 #
 ###################################################################################################
+
+# -----------------------------------------------------------------------------
+# Core AoE Loot Settings
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Enable
+#        Description: Master toggle for the AoE Loot system
+#        Default:     1 (Enabled)
+#
+AoELoot.Enable = 1
+
+#
+#    AoELoot.Range
+#        Description: Maximum range (yards) to collect loot from nearby corpses
+#        Range:       5.0 - 100.0
+#        Default:     30.0
+#
+AoELoot.Range = 30.0
+
+#
+#    AoELoot.MaxCorpses
+#        Description: Maximum corpses to include in a single AoE loot operation
+#        Range:       1 - 50
+#        Default:     10
+#
+AoELoot.MaxCorpses = 10
+
+#
+#    AoELoot.AutoLoot
+#        Description: Controls automatic looting behavior
+#                     0 = Disabled
+#                     1 = Always auto-loot
+#                     2 = Respect player's AutoLoot client setting
+#        Default:     2
+#
+AoELoot.AutoLoot = 2
+
+#
+#    AoELoot.ShowMessage
+#        Description: Show AoE loot info messages to players
+#        Default:     1 (Enabled)
+#
+AoELoot.ShowMessage = 1
+
+#
+#    AoELoot.AllowInGroup
+#        Description: Allow AoE looting while in a group or raid
+#        Default:     1 (Enabled)
+#
+AoELoot.AllowInGroup = 1
+
+#
+#    AoELoot.QuestItems
+#        Description: Include quest items in AoE loot collection
+#        Default:     1 (Enabled)
+#
+AoELoot.QuestItems = 1
+
+#
+#    AoELoot.IgnoreTapped
+#        Description: Skip corpses tapped by other players/groups
+#        Default:     1 (Enabled)
+#
+AoELoot.IgnoreTapped = 1
+
+#
+#    AoELoot.PlayersOnly
+#        Description: Only allow players to use AoE loot (not NPCs/pets)
+#        Default:     1 (Enabled)
+#
+AoELoot.PlayersOnly = 1
+
+#
+#    AoELoot.AutoCreditGold
+#        Description: Automatically credit gold when looting solo
+#        Default:     1 (Enabled)
+#
+AoELoot.AutoCreditGold = 1
+
+#
+#    AoELoot.MaxMergeSlots
+#        Description: Maximum item slots to merge into loot window
+#        Range:       1 - 16
+#        Default:     15
+#
+AoELoot.MaxMergeSlots = 15
+
+#
+#    AoELoot.AutoStoreWindowSeconds
+#        Description: Time window (seconds) to consider autostore "recent"
+#        Range:       1 - 60
+#        Default:     5
+#
+AoELoot.AutoStoreWindowSeconds = 5
+
+#
+#    AoELoot.DebugPerCorpse
+#        Description: Enable debug logging for each corpse looted
+#        Default:     0 (Disabled)
+#
+AoELoot.DebugPerCorpse = 0
+
+# -----------------------------------------------------------------------------
+# AoE Loot Companion-Bound Looter Pet
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.LooterPet.Enable
+#        Description: Enable companion-bound looter pulse behavior
+#                     (pet/guardian/charm can trigger periodic AoE looting)
+#        Default:     1 (Enabled)
+#
+AoELoot.LooterPet.Enable = 1
+
+#
+#    AoELoot.LooterPet.AllowInCombat
+#        Description: Legacy flag (autonomous looter mode is forced out-of-combat)
+#        Default:     0
+#
+AoELoot.LooterPet.AllowInCombat = 0
+
+#
+#    AoELoot.LooterPet.PulseMs
+#        Description: Interval in milliseconds between looter pulse checks
+#        Range:       500 - 10000
+#        Default:     1500
+#
+AoELoot.LooterPet.PulseMs = 1500
+
+#
+#    AoELoot.LooterPet.FallbackToPlayerAnchor
+#        Description: If companion-anchor pulse finds no eligible corpse, retry from player anchor
+#        Default:     1 (Enabled)
+#
+AoELoot.LooterPet.FallbackToPlayerAnchor = 1
+
+#
+#    AoELoot.LooterPet.CompanionLeash.Enable
+#        Description: Require companion to stay within leash distance of player for autonomous pulses
+#        Default:     1 (Enabled)
+#
+AoELoot.LooterPet.CompanionLeash.Enable = 1
+
+#
+#    AoELoot.LooterPet.CompanionLeash.MaxDistance
+#        Description: Maximum companion distance (yards) from player to allow autonomous pulses
+#        Range:       5.0 - 150.0
+#        Default:     45.0
+#
+AoELoot.LooterPet.CompanionLeash.MaxDistance = 45.0
+
+#
+#    AoELoot.LooterPet.Pathfinding.Enable
+#        Description: Use server pathfinding checks before selecting a corpse anchor target
+#                     for looter-pet pulses. Recommended when MoveMaps.Enable = 1.
+#        Default:     1 (Enabled)
+#
+AoELoot.LooterPet.Pathfinding.Enable = 1
+
+#
+#    AoELoot.LooterPet.Pathfinding.AllowIncomplete
+#        Description: Allow partial path solutions (PATHFIND_INCOMPLETE) for pulse targeting
+#        Default:     1 (Enabled)
+#
+AoELoot.LooterPet.Pathfinding.AllowIncomplete = 1
+
+#
+#    AoELoot.LooterPet.Pathfinding.RejectShortcut
+#        Description: Reject shortcut path types (PATHFIND_SHORTCUT) for stricter reachability
+#        Default:     0 (Disabled)
+#
+AoELoot.LooterPet.Pathfinding.RejectShortcut = 0
+
+#
+#    AoELoot.LooterPet.Pathfinding.MaxPathLength
+#        Description: Maximum allowed computed path length (yards) from companion anchor to corpse
+#                     0 disables this cap.
+#        Range:       0.0 - 500.0
+#        Default:     80.0
+#
+AoELoot.LooterPet.Pathfinding.MaxPathLength = 80.0
+
+#
+#    AoELoot.LooterPet.Pathfinding.MaxChecks
+#        Description: Maximum nearest corpse candidates to evaluate per pulse
+#        Range:       1 - 50
+#        Default:     12
+#
+AoELoot.LooterPet.Pathfinding.MaxChecks = 12
+
+# -----------------------------------------------------------------------------
+# AoE Loot Extensions: Quality Filtering
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Extensions.QualityFilter.Enable
+#        Description: Enable quality-based loot filtering (server default)
+#        Default:     0 (Disabled - players can enable per-character)
+#
+AoELoot.Extensions.QualityFilter.Enable = 1
+
+#
+#    AoELoot.Extensions.QualityFilter.MinQuality
+#        Description: Default minimum item quality to loot (player overridable)
+#                     0=Poor, 1=Common, 2=Uncommon, 3=Rare, 4=Epic, 5=Legendary, 6=Artifact
+#        Default:     0 (Poor)
+#
+AoELoot.Extensions.QualityFilter.MinQuality = 4
+
+#
+#    AoELoot.Extensions.QualityFilter.MaxQuality
+#        Description: Server-enforced maximum quality (cannot be overridden)
+#        Default:     6 (Artifact)
+#
+AoELoot.Extensions.QualityFilter.MaxQuality = 6
+
+#
+#    AoELoot.Extensions.QualityFilter.AutoVendorPoor
+#        Description: Default auto-vendor poor quality items (player overridable)
+#        Default:     0 (Disabled)
+#
+AoELoot.Extensions.QualityFilter.AutoVendorPoor = 0
+
+# -----------------------------------------------------------------------------
+# AoE Loot Extensions: Profession Integration
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Extensions.Profession.AutoSkin
+#        Description: Server default for auto-skinning corpses (player overridable)
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.Profession.AutoSkin = 1
+
+#
+#    AoELoot.Extensions.Profession.AutoMine
+#        Description: Server default for auto-mining ore deposits
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.Profession.AutoMine = 1
+
+#
+#    AoELoot.Extensions.Profession.AutoHerb
+#        Description: Server default for auto-gathering herb nodes
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.Profession.AutoHerb = 1
+
+#
+#    AoELoot.Extensions.Profession.Range
+#        Description: Range (yards) for auto-profession gathering
+#        Range:       1.0 - 100.0
+#        Default:     10.0
+#
+AoELoot.Extensions.Profession.Range = 10.0
+
+# -----------------------------------------------------------------------------
+# AoE Loot Extensions: Smart Loot
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Extensions.SmartLoot.PreferCurrentSpec
+#        Description: Prioritize items usable by current talent spec
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.SmartLoot.PreferCurrentSpec = 1
+
+#
+#    AoELoot.Extensions.SmartLoot.PreferEquippable
+#        Description: Prioritize equippable items over non-equippable
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.SmartLoot.PreferEquippable = 1
+
+#
+#    AoELoot.Extensions.SmartLoot.PrioritizeUpgrades
+#        Description: Highlight items that are upgrades for the player
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.SmartLoot.PrioritizeUpgrades = 1
+
+# -----------------------------------------------------------------------------
+# AoE Loot Extensions: Mythic+ Integration
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Extensions.MythicPlus.Bonus
+#        Description: Apply bonus range/features in Mythic+ dungeons
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.MythicPlus.Bonus = 1
+
+#
+#    AoELoot.Extensions.MythicPlus.RangeMultiplier
+#        Description: AoE loot range multiplier in Mythic+ dungeons
+#        Range:       1.0 - 5.0
+#        Default:     1.5
+#
+AoELoot.Extensions.MythicPlus.RangeMultiplier = 1.5
+
+# -----------------------------------------------------------------------------
+# AoE Loot Extensions: Raid Mode
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Extensions.Raid.Enable
+#        Description: Enable enhanced AoE looting in raids
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.Raid.Enable = 1
+
+#
+#    AoELoot.Extensions.Raid.MaxCorpses
+#        Description: Maximum corpses to loot in raid environments
+#        Default:     25
+#
+AoELoot.Extensions.Raid.MaxCorpses = 25
+
+# -----------------------------------------------------------------------------
+# AoE Loot Extensions: Statistics
+# -----------------------------------------------------------------------------
+
+#
+#    AoELoot.Extensions.TrackDetailedStats
+#        Description: Track detailed loot statistics per player
+#        Default:     1 (Enabled)
+#
+AoELoot.Extensions.TrackDetailedStats = 1
