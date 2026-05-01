@@ -1,0 +1,2023 @@
+/*
+ * DarkChaos AoE Loot System - Unified Implementation
+ * Merged from ac_aoeloot.cpp and dc_aoeloot_extensions.cpp
+ *
+ * Features:
+ * - Core AoE loot merging
+ * - Quality filtering
+ * - Profession integration (skinning, mining, herbing)
+ * - Detailed statistics tracking
+ * - Smart loot preferences
+ */
+
+#include "ScriptMgr.h"
+#include "Player.h"
+#include "Creature.h"
+#include "Config.h"
+#include "Chat.h"
+#include "CommandScript.h"
+#include "ObjectAccessor.h"
+#include "ObjectMgr.h"
+#include "WorldPacket.h"
+#include "Opcodes.h"
+#include "GameTime.h"
+#include "LootMgr.h"
+#include "Group.h"
+#include "CellImpl.h"
+#include "Log.h"
+#include "Mail.h"
+#include "DatabaseEnv.h"
+#include "Item.h"
+#include "StringFormat.h"
+#include "Spell.h"
+#include "PathGenerator.h"
+
+#include <vector>
+#include <list>
+#include <unordered_map>
+#include <unordered_set>
+#include <algorithm>
+#include <sstream>
+#include <limits>
+#include <cctype>
+
+using namespace Acore::ChatCommands;
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+struct AoELootConfig
+{
+    // Core settings
+    bool enabled = true;
+    float range = 30.0f;
+    uint32 maxCorpses = 10;
+    uint8 maxMergeSlots = 15;
+    bool autoCreditGold = true;
+    uint8 autoLoot = 0;
+    uint32 autoStoreWindowSeconds = 5;
+    bool allowInGroup = true;
+    bool showMessage = true;
+    bool playersOnly = true;
+    bool ignoreTapped = true;
+    bool questItems = true;
+    bool debugPerCorpse = false;
+
+    // Extension settings
+    bool qualityFilterEnabled = false;
+    uint8 minQuality = 0;
+    uint8 maxQuality = 6;
+    bool autoVendorPoorItems = false;
+
+    // Profession integration
+    bool autoSkinEnabled = true;
+    bool autoMineEnabled = true;
+    bool autoHerbEnabled = true;
+    float professionRange = 10.0f;
+
+    // Smart loot
+    bool preferCurrentSpec = true;
+    bool preferEquippable = true;
+    bool prioritizeUpgrades = true;
+
+    // Mythic+ integration
+    bool mythicPlusBonus = true;
+    float mythicPlusRangeMultiplier = 1.5f;
+
+    // Raid features
+    bool raidModeEnabled = true;
+    uint32 raidMaxCorpses = 25;
+
+    // Statistics
+    bool trackDetailedStats = true;
+
+    // Looter pet pathfinding safety
+    bool looterPetPathfindingEnable = true;
+    bool looterPetPathAllowIncomplete = true;
+    bool looterPetPathRejectShortcut = false;
+    float looterPetPathMaxLength = 80.0f;
+    uint32 looterPetPathMaxChecks = 12;
+
+    void Load()
+    {
+        // Core settings
+        enabled = sConfigMgr->GetOption<bool>("AoELoot.Enable", true);
+        range = sConfigMgr->GetOption<float>("AoELoot.Range", 30.0f);
+        maxCorpses = sConfigMgr->GetOption<uint32>("AoELoot.MaxCorpses", 10);
+        autoLoot = sConfigMgr->GetOption<uint8>("AoELoot.AutoLoot", 0);
+        allowInGroup = sConfigMgr->GetOption<bool>("AoELoot.AllowInGroup", true);
+        showMessage = sConfigMgr->GetOption<bool>("AoELoot.ShowMessage", true);
+        playersOnly = sConfigMgr->GetOption<bool>("AoELoot.PlayersOnly", true);
+        ignoreTapped = sConfigMgr->GetOption<bool>("AoELoot.IgnoreTapped", true);
+        questItems = sConfigMgr->GetOption<bool>("AoELoot.QuestItems", true);
+        maxMergeSlots = sConfigMgr->GetOption<uint8>("AoELoot.MaxMergeSlots", 15u);
+        debugPerCorpse = sConfigMgr->GetOption<bool>("AoELoot.DebugPerCorpse", false);
+        autoCreditGold = sConfigMgr->GetOption<bool>("AoELoot.AutoCreditGold", true);
+        autoStoreWindowSeconds = sConfigMgr->GetOption<uint32>("AoELoot.AutoStoreWindowSeconds", 5u);
+
+        // Extension settings
+        qualityFilterEnabled = sConfigMgr->GetOption<bool>("AoELoot.Extensions.QualityFilter.Enable", false);
+        minQuality = sConfigMgr->GetOption<uint8>("AoELoot.Extensions.QualityFilter.MinQuality", 0);
+        maxQuality = sConfigMgr->GetOption<uint8>("AoELoot.Extensions.QualityFilter.MaxQuality", 6);
+        autoVendorPoorItems = sConfigMgr->GetOption<bool>("AoELoot.Extensions.QualityFilter.AutoVendorPoor", false);
+
+        autoSkinEnabled = sConfigMgr->GetOption<bool>("AoELoot.Extensions.Profession.AutoSkin", true);
+        autoMineEnabled = sConfigMgr->GetOption<bool>("AoELoot.Extensions.Profession.AutoMine", true);
+        autoHerbEnabled = sConfigMgr->GetOption<bool>("AoELoot.Extensions.Profession.AutoHerb", true);
+        professionRange = sConfigMgr->GetOption<float>("AoELoot.Extensions.Profession.Range", 10.0f);
+
+        preferCurrentSpec = sConfigMgr->GetOption<bool>("AoELoot.Extensions.SmartLoot.PreferCurrentSpec", true);
+        preferEquippable = sConfigMgr->GetOption<bool>("AoELoot.Extensions.SmartLoot.PreferEquippable", true);
+        prioritizeUpgrades = sConfigMgr->GetOption<bool>("AoELoot.Extensions.SmartLoot.PrioritizeUpgrades", true);
+
+        mythicPlusBonus = sConfigMgr->GetOption<bool>("AoELoot.Extensions.MythicPlus.Bonus", true);
+        mythicPlusRangeMultiplier = sConfigMgr->GetOption<float>("AoELoot.Extensions.MythicPlus.RangeMultiplier", 1.5f);
+
+        raidModeEnabled = sConfigMgr->GetOption<bool>("AoELoot.Extensions.Raid.Enable", true);
+        raidMaxCorpses = sConfigMgr->GetOption<uint32>("AoELoot.Extensions.Raid.MaxCorpses", 25);
+
+        trackDetailedStats = sConfigMgr->GetOption<bool>("AoELoot.Extensions.TrackDetailedStats", true);
+
+        looterPetPathfindingEnable = sConfigMgr->GetOption<bool>(
+            "AoELoot.LooterPet.Pathfinding.Enable", true);
+        looterPetPathAllowIncomplete = sConfigMgr->GetOption<bool>(
+            "AoELoot.LooterPet.Pathfinding.AllowIncomplete", true);
+        looterPetPathRejectShortcut = sConfigMgr->GetOption<bool>(
+            "AoELoot.LooterPet.Pathfinding.RejectShortcut", false);
+        looterPetPathMaxLength = sConfigMgr->GetOption<float>(
+            "AoELoot.LooterPet.Pathfinding.MaxPathLength", 80.0f);
+        looterPetPathMaxChecks = sConfigMgr->GetOption<uint32>(
+            "AoELoot.LooterPet.Pathfinding.MaxChecks", 12u);
+
+        // Validate and clamp all numeric settings
+        if (range < 5.0f) range = 5.0f;
+        if (range > 100.0f) range = 100.0f;
+        if (maxCorpses < 1) maxCorpses = 1;
+        if (maxCorpses > 50) maxCorpses = 50;
+        if (autoLoot > 2) autoLoot = 0;
+        if (maxMergeSlots < 1) maxMergeSlots = 1;
+        if (maxMergeSlots > 16) maxMergeSlots = 16;
+        if (autoStoreWindowSeconds < 1) autoStoreWindowSeconds = 1;
+        if (autoStoreWindowSeconds > 60) autoStoreWindowSeconds = 60;
+        if (minQuality > 6) minQuality = 6;
+        if (maxQuality > 6) maxQuality = 6;
+        if (minQuality > maxQuality) minQuality = maxQuality;
+        if (professionRange < 1.0f) professionRange = 1.0f;
+        if (professionRange > 100.0f) professionRange = 100.0f;
+        if (mythicPlusRangeMultiplier < 1.0f) mythicPlusRangeMultiplier = 1.0f;
+        if (mythicPlusRangeMultiplier > 5.0f) mythicPlusRangeMultiplier = 5.0f;
+        if (raidMaxCorpses < 1) raidMaxCorpses = 1;
+        if (raidMaxCorpses > 100) raidMaxCorpses = 100;
+        if (looterPetPathMaxLength < 0.0f) looterPetPathMaxLength = 0.0f;
+        if (looterPetPathMaxLength > 500.0f) looterPetPathMaxLength = 500.0f;
+        if (looterPetPathMaxChecks < 1) looterPetPathMaxChecks = 1;
+        if (looterPetPathMaxChecks > 50) looterPetPathMaxChecks = 50;
+    }
+};
+
+static AoELootConfig sConfig;
+
+// =============================================================================
+// Player Data Structures
+// =============================================================================
+
+struct PlayerLootPreferences
+{
+    bool aoeLootEnabled = true;
+    bool showMessages = true;
+    uint8 minQuality = 0;
+    bool autoSkin = true;
+    bool smartLootEnabled = true;
+    bool autoVendorPoor = false;
+    bool goldOnly = false;
+    float lootRange = 45.0f;
+    std::unordered_set<uint32> ignoredItemIds;
+    uint8 activePreset = 0;  // 0 = custom
+};
+
+struct DetailedLootStats
+{
+    uint32 totalItemsLooted = 0;
+    uint32 totalGoldLooted = 0;
+    uint32 poorItemsVendored = 0;
+    uint32 goldFromVendor = 0;
+    uint32 skinnedCorpses = 0;
+    uint32 minedNodes = 0;
+    uint32 herbedNodes = 0;
+    uint32 upgradesFound = 0;
+
+    // Quality breakdown
+    uint32 qualityPoor = 0;
+    uint32 qualityCommon = 0;
+    uint32 qualityUncommon = 0;
+    uint32 qualityRare = 0;
+    uint32 qualityEpic = 0;
+    uint32 qualityLegendary = 0;
+
+    // Filtered items by quality
+    uint32 filteredPoor = 0;
+    uint32 filteredCommon = 0;
+    uint32 filteredUncommon = 0;
+    uint32 filteredRare = 0;
+    uint32 filteredEpic = 0;
+    uint32 filteredLegendary = 0;
+
+    uint32 mythicBonusItems = 0;
+};
+
+struct PlayerAoELootData
+{
+    uint64 lastAoELoot = 0;
+    uint32 lootedThisSession = 0;
+    uint64 lastCreditedGold = 0;
+    uint64 accumulatedCreditedGold = 0;
+};
+
+static std::unordered_map<ObjectGuid, PlayerLootPreferences> sPlayerPrefs;
+static std::unordered_map<ObjectGuid, DetailedLootStats> sDetailedStats;
+static std::unordered_map<ObjectGuid, PlayerAoELootData> sPlayerLootData;
+static std::unordered_map<ObjectGuid, uint64> sPlayerAutoStoreTimestamp;
+
+struct PreferenceSchemaInfo
+{
+    bool initialized = false;
+    bool hasShowMessages = false;
+    bool hasAutoVendorPoor = false;
+    bool hasIgnoredItems = false;
+    bool hasGoldOnly = false;
+    bool hasLootRange = false;
+    bool hasActivePreset = false;
+};
+
+static PreferenceSchemaInfo sPreferenceSchema;
+
+static std::string JoinStringList(std::vector<std::string> const& values, char const* separator = ", ")
+{
+    std::ostringstream ss;
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (i > 0)
+            ss << separator;
+        ss << values[i];
+    }
+    return ss.str();
+}
+
+static std::string EscapeSqlString(std::string const& input)
+{
+    std::string escaped;
+    escaped.reserve(input.size());
+
+    for (char c : input)
+    {
+        if (c == '\'')
+            escaped += "''";
+        else
+            escaped.push_back(c);
+    }
+
+    return escaped;
+}
+
+static std::string SerializeIgnoredItems(std::unordered_set<uint32> const& ignoredItemIds)
+{
+    if (ignoredItemIds.empty())
+        return "";
+
+    std::vector<uint32> sortedIds(ignoredItemIds.begin(), ignoredItemIds.end());
+    std::sort(sortedIds.begin(), sortedIds.end());
+
+    std::ostringstream ss;
+    for (size_t i = 0; i < sortedIds.size(); ++i)
+    {
+        if (i > 0)
+            ss << ',';
+        ss << sortedIds[i];
+    }
+
+    return ss.str();
+}
+
+static void ParseIgnoredItems(std::string const& csv, std::unordered_set<uint32>& ignoredItemIds)
+{
+    ignoredItemIds.clear();
+
+    if (csv.empty())
+        return;
+
+    std::stringstream ss(csv);
+    std::string token;
+
+    while (std::getline(ss, token, ','))
+    {
+        token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char c)
+        {
+            return std::isspace(c) != 0;
+        }), token.end());
+
+        if (token.empty())
+            continue;
+
+        try
+        {
+            uint32 itemId = static_cast<uint32>(std::stoul(token));
+            if (itemId > 0)
+                ignoredItemIds.insert(itemId);
+        }
+        catch (...)
+        {
+            // Ignore malformed item IDs in legacy CSV payloads.
+        }
+    }
+}
+
+static PreferenceSchemaInfo const& GetPreferenceSchemaInfo()
+{
+    if (sPreferenceSchema.initialized)
+        return sPreferenceSchema;
+
+    sPreferenceSchema.initialized = true;
+
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT COLUMN_NAME FROM information_schema.COLUMNS "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dc_aoeloot_preferences'");
+
+    if (!result)
+    {
+        LOG_WARN("scripts.dc", "AoELoot: Could not inspect dc_aoeloot_preferences schema. Using base-column fallback.");
+        return sPreferenceSchema;
+    }
+
+    do
+    {
+        std::string const column = (*result)[0].Get<std::string>();
+        if (column == "show_messages")
+            sPreferenceSchema.hasShowMessages = true;
+        else if (column == "auto_vendor_poor")
+            sPreferenceSchema.hasAutoVendorPoor = true;
+        else if (column == "ignored_items")
+            sPreferenceSchema.hasIgnoredItems = true;
+        else if (column == "gold_only")
+            sPreferenceSchema.hasGoldOnly = true;
+        else if (column == "loot_range")
+            sPreferenceSchema.hasLootRange = true;
+        else if (column == "active_preset")
+            sPreferenceSchema.hasActivePreset = true;
+    } while (result->NextRow());
+
+    LOG_INFO("scripts.dc",
+        "AoELoot preferences schema: show_messages={}, auto_vendor_poor={}, ignored_items={}, gold_only={}, loot_range={}, active_preset={}",
+        sPreferenceSchema.hasShowMessages ? "yes" : "no",
+        sPreferenceSchema.hasAutoVendorPoor ? "yes" : "no",
+        sPreferenceSchema.hasIgnoredItems ? "yes" : "no",
+        sPreferenceSchema.hasGoldOnly ? "yes" : "no",
+        sPreferenceSchema.hasLootRange ? "yes" : "no",
+        sPreferenceSchema.hasActivePreset ? "yes" : "no");
+
+    return sPreferenceSchema;
+}
+
+// =============================================================================
+// Loot Filter Presets - Quick switch between configurations
+// =============================================================================
+
+enum LootPreset : uint8
+{
+    LOOT_PRESET_EVERYTHING  = 0,  // All items (minQuality = 0)
+    LOOT_PRESET_VENDOR_ONLY = 1,  // Common+ (minQuality = 1)
+    LOOT_PRESET_ADVENTURER  = 2,  // Uncommon+ (minQuality = 2)
+    LOOT_PRESET_RAIDER      = 3,  // Rare+ (minQuality = 3)
+    LOOT_PRESET_COLLECTOR   = 4,  // Epic+ (minQuality = 4)
+    LOOT_PRESET_CUSTOM      = 5   // User-defined
+};
+
+// Get minimum quality for a preset
+inline uint8 GetPresetMinQuality(LootPreset preset)
+{
+    switch (preset)
+    {
+        case LOOT_PRESET_EVERYTHING:  return 0;
+        case LOOT_PRESET_VENDOR_ONLY: return 1;
+        case LOOT_PRESET_ADVENTURER:  return 2;
+        case LOOT_PRESET_RAIDER:      return 3;
+        case LOOT_PRESET_COLLECTOR:   return 4;
+        case LOOT_PRESET_CUSTOM:
+        default:                      return 0;
+    }
+}
+
+// Get preset name for display
+inline const char* GetPresetName(LootPreset preset)
+{
+    switch (preset)
+    {
+        case LOOT_PRESET_EVERYTHING:  return "Everything";
+        case LOOT_PRESET_VENDOR_ONLY: return "Vendor Trash";
+        case LOOT_PRESET_ADVENTURER:  return "Adventurer";
+        case LOOT_PRESET_RAIDER:      return "Raider";
+        case LOOT_PRESET_COLLECTOR:   return "Collector";
+        case LOOT_PRESET_CUSTOM:      return "Custom";
+        default:                      return "Unknown";
+    }
+}
+
+// Set player's active preset
+inline void SetPlayerLootPreset(ObjectGuid guid, LootPreset preset)
+{
+    PlayerLootPreferences& prefs = sPlayerPrefs[guid];
+    prefs.activePreset = static_cast<uint8>(preset);
+    prefs.minQuality = GetPresetMinQuality(preset);
+}
+
+// =============================================================================
+// Smart Item Detection - Highlights upgrades and new collectibles
+// =============================================================================
+
+struct LootItemHighlight
+{
+    bool isUpgrade = false;       // Item is ilvl upgrade for player
+    bool isTransmogNew = false;   // Appearance not yet collected
+    bool isCollectionNew = false; // Mount/pet/toy not collected
+    uint32 itemId = 0;
+    int32 ilvlDelta = 0;          // How much of an upgrade (+5, +10, etc)
+};
+
+// Get full highlight info for an item (currently unused)
+/*
+static LootItemHighlight GetItemHighlight(Player* player, uint32 itemId)
+{
+    LootItemHighlight highlight;
+    highlight.itemId = itemId;
+
+    if (!player) return highlight;
+
+    // Check if upgrade
+    highlight.isUpgrade = IsItemUpgrade(player, itemId, highlight.ilvlDelta);
+
+    // Note: isTransmogNew and isCollectionNew would require integration with
+    // the CollectionSystem (dc_collection_*.cpp) - placeholder for now
+
+    return highlight;
+}
+*/
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+static std::string FormatCoins(uint64_t copper)
+{
+    uint64_t g = copper / 10000;
+    uint64_t s = (copper % 10000) / 100;
+    uint64_t c = copper % 100;
+    std::ostringstream ss;
+    if (g > 0) ss << g << " Gold ";
+    if (s > 0) ss << s << " Silver ";
+    ss << c << " Copper";
+    return ss.str();
+}
+
+static const char* GetQualityName(uint8 quality)
+{
+    static const char* names[] = { "Poor", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Artifact" };
+    return quality <= 6 ? names[quality] : "Unknown";
+}
+
+static bool IsItemIgnoredByPlayer(Player* player, uint32 itemId)
+{
+    if (!player || itemId == 0)
+        return false;
+
+    auto prefIt = sPlayerPrefs.find(player->GetGUID());
+    if (prefIt == sPlayerPrefs.end())
+        return false;
+
+    return prefIt->second.ignoredItemIds.find(itemId) != prefIt->second.ignoredItemIds.end();
+}
+
+static uint32 GetAutoVendorCopper(uint32 itemId, uint8 itemCount)
+{
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+    if (!proto || proto->Quality != ITEM_QUALITY_POOR || proto->SellPrice == 0)
+        return 0;
+
+    uint64 totalCopper = uint64(proto->SellPrice) * uint64(itemCount);
+    if (totalCopper > std::numeric_limits<uint32>::max())
+        return std::numeric_limits<uint32>::max();
+
+    return static_cast<uint32>(totalCopper);
+}
+
+static void CreditAutoVendorGold(Player* player, uint32 copper, uint32 vendoredItems)
+{
+    if (!player || copper == 0)
+        return;
+
+    uint32 credited = copper;
+    if (credited > static_cast<uint32>(std::numeric_limits<int32>::max()))
+        credited = static_cast<uint32>(std::numeric_limits<int32>::max());
+
+    player->ModifyMoney(static_cast<int32>(credited));
+
+    DetailedLootStats& stats = sDetailedStats[player->GetGUID()];
+    if (credited > std::numeric_limits<uint32>::max() - stats.goldFromVendor)
+        stats.goldFromVendor = std::numeric_limits<uint32>::max();
+    else
+        stats.goldFromVendor += credited;
+
+    if (vendoredItems > std::numeric_limits<uint32>::max() - stats.poorItemsVendored)
+        stats.poorItemsVendored = std::numeric_limits<uint32>::max();
+    else
+        stats.poorItemsVendored += vendoredItems;
+
+    PlayerAoELootData& lootData = sPlayerLootData[player->GetGUID()];
+    lootData.lastCreditedGold = credited;
+    lootData.accumulatedCreditedGold += credited;
+}
+
+// =============================================================================
+// Player Preference Functions (replaces try-catch cross-references)
+// =============================================================================
+
+bool GetPlayerShowMessages(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.showMessages : true;
+}
+
+void SetPlayerShowMessages(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].showMessages = value;
+}
+
+// =============================================================================
+// DCAoELootExt Namespace - External Interface Functions
+// =============================================================================
+
+namespace DCAoELootExt
+{
+
+bool IsPlayerAoELootEnabled(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.aoeLootEnabled : true;
+}
+
+bool GetPlayerShowMessages(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.showMessages : true;
+}
+
+void SetPlayerAoELootEnabled(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].aoeLootEnabled = value;
+}
+
+void SetPlayerShowMessages(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].showMessages = value;
+}
+
+uint8 GetPlayerMinQuality(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.minQuality : 0;
+}
+
+void SetPlayerMinQuality(ObjectGuid playerGuid, uint8 quality)
+{
+    if (quality > 6) quality = 6;
+    sPlayerPrefs[playerGuid].minQuality = quality;
+}
+
+bool GetPlayerAutoSkin(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.autoSkin : true;
+}
+
+void SetPlayerAutoSkin(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].autoSkin = value;
+}
+
+bool GetPlayerSmartLoot(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.smartLootEnabled : true;
+}
+
+void SetPlayerSmartLoot(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].smartLootEnabled = value;
+}
+
+bool GetPlayerAutoVendorPoor(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.autoVendorPoor : false;
+}
+
+void SetPlayerAutoVendorPoor(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].autoVendorPoor = value;
+}
+
+bool GetPlayerGoldOnly(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.goldOnly : false;
+}
+
+void SetPlayerGoldOnly(ObjectGuid playerGuid, bool value)
+{
+    sPlayerPrefs[playerGuid].goldOnly = value;
+}
+
+bool GetLooterPetPathfindingEnabled()
+{
+    return sConfig.looterPetPathfindingEnable;
+}
+
+void SetLooterPetPathfindingEnabled(bool value)
+{
+    sConfig.looterPetPathfindingEnable = value;
+}
+
+void ReloadAoELootConfig()
+{
+    sConfig.Load();
+}
+
+bool GetLooterPetPathAllowIncomplete()
+{
+    return sConfig.looterPetPathAllowIncomplete;
+}
+
+void SetLooterPetPathAllowIncomplete(bool value)
+{
+    sConfig.looterPetPathAllowIncomplete = value;
+}
+
+bool GetLooterPetPathRejectShortcut()
+{
+    return sConfig.looterPetPathRejectShortcut;
+}
+
+void SetLooterPetPathRejectShortcut(bool value)
+{
+    sConfig.looterPetPathRejectShortcut = value;
+}
+
+float GetLooterPetPathMaxLength()
+{
+    return sConfig.looterPetPathMaxLength;
+}
+
+uint32 GetLooterPetPathMaxChecks()
+{
+    return sConfig.looterPetPathMaxChecks;
+}
+
+float GetPlayerLootRange(ObjectGuid playerGuid)
+{
+    auto it = sPlayerPrefs.find(playerGuid);
+    return it != sPlayerPrefs.end() ? it->second.lootRange : sConfig.range;
+}
+
+void SetPlayerLootRange(ObjectGuid playerGuid, float value)
+{
+    if (value < 5.0f)
+        value = 5.0f;
+    if (value > 100.0f)
+        value = 100.0f;
+    sPlayerPrefs[playerGuid].lootRange = value;
+}
+
+void TogglePlayerIgnoredItem(ObjectGuid playerGuid, uint32 itemId)
+{
+    if (!itemId)
+        return;
+
+    auto& ignored = sPlayerPrefs[playerGuid].ignoredItemIds;
+    auto it = ignored.find(itemId);
+    if (it == ignored.end())
+        ignored.insert(itemId);
+    else
+        ignored.erase(it);
+}
+
+bool IsPlayerItemIgnored(ObjectGuid playerGuid, uint32 itemId)
+{
+    if (!itemId)
+        return false;
+
+    auto prefIt = sPlayerPrefs.find(playerGuid);
+    if (prefIt == sPlayerPrefs.end())
+        return false;
+
+    return prefIt->second.ignoredItemIds.find(itemId) != prefIt->second.ignoredItemIds.end();
+}
+
+uint32 GetPlayerIgnoredCount(ObjectGuid playerGuid)
+{
+    auto prefIt = sPlayerPrefs.find(playerGuid);
+    return prefIt != sPlayerPrefs.end() ? static_cast<uint32>(prefIt->second.ignoredItemIds.size()) : 0;
+}
+
+void GetDetailedStats(ObjectGuid playerGuid, uint32& itemsLooted, uint32& goldLooted, uint32& upgradesFound)
+{
+    auto it = sDetailedStats.find(playerGuid);
+    if (it != sDetailedStats.end())
+    {
+        itemsLooted = it->second.totalItemsLooted;
+        goldLooted = it->second.totalGoldLooted;
+        upgradesFound = it->second.upgradesFound;
+    }
+    else
+    {
+        itemsLooted = 0;
+        goldLooted = 0;
+        upgradesFound = 0;
+    }
+}
+
+void GetQualityStats(ObjectGuid playerGuid,
+                     uint32& poor, uint32& common, uint32& uncommon,
+                     uint32& rare, uint32& epic, uint32& legendary,
+                     uint32& filtPoor, uint32& filtCommon, uint32& filtUncommon,
+                     uint32& filtRare, uint32& filtEpic, uint32& filtLegendary)
+{
+    auto it = sDetailedStats.find(playerGuid);
+    if (it != sDetailedStats.end())
+    {
+        poor = it->second.qualityPoor;
+        common = it->second.qualityCommon;
+        uncommon = it->second.qualityUncommon;
+        rare = it->second.qualityRare;
+        epic = it->second.qualityEpic;
+        legendary = it->second.qualityLegendary;
+        filtPoor = it->second.filteredPoor;
+        filtCommon = it->second.filteredCommon;
+        filtUncommon = it->second.filteredUncommon;
+        filtRare = it->second.filteredRare;
+        filtEpic = it->second.filteredEpic;
+        filtLegendary = it->second.filteredLegendary;
+    }
+    else
+    {
+        poor = common = uncommon = rare = epic = legendary = 0;
+        filtPoor = filtCommon = filtUncommon = filtRare = filtEpic = filtLegendary = 0;
+    }
+}
+
+} // namespace DCAoELootExt
+
+// =============================================================================
+// Statistics Functions
+// =============================================================================
+
+void UpdateDetailedStats(ObjectGuid playerGuid, uint32 itemsLooted, uint32 goldLooted, uint32 upgradesFound)
+{
+    if (!sConfig.trackDetailedStats) return;
+    DetailedLootStats& stats = sDetailedStats[playerGuid];
+    stats.totalItemsLooted += itemsLooted;
+    stats.totalGoldLooted += goldLooted;
+    stats.upgradesFound += upgradesFound;
+}
+
+void UpdateQualityStats(ObjectGuid playerGuid, uint8 quality)
+{
+    if (!sConfig.trackDetailedStats) return;
+    DetailedLootStats& stats = sDetailedStats[playerGuid];
+    switch (quality)
+    {
+        case 0: stats.qualityPoor++; break;
+        case 1: stats.qualityCommon++; break;
+        case 2: stats.qualityUncommon++; break;
+        case 3: stats.qualityRare++; break;
+        case 4: stats.qualityEpic++; break;
+        case 5:
+        case 6: stats.qualityLegendary++; break;
+        default: stats.qualityCommon++; break;
+    }
+}
+
+void UpdateFilteredStats(ObjectGuid playerGuid, uint8 quality)
+{
+    if (!sConfig.trackDetailedStats) return;
+    DetailedLootStats& stats = sDetailedStats[playerGuid];
+    switch (quality)
+    {
+        case 0: stats.filteredPoor++; break;
+        case 1: stats.filteredCommon++; break;
+        case 2: stats.filteredUncommon++; break;
+        case 3: stats.filteredRare++; break;
+        case 4: stats.filteredEpic++; break;
+        case 5:
+        case 6: stats.filteredLegendary++; break;
+        default: stats.filteredCommon++; break;
+    }
+}
+
+// =============================================================================
+// Core Loot Functions
+// =============================================================================
+
+// Using declarations for DCAoELootExt functions
+using DCAoELootExt::IsPlayerAoELootEnabled;
+using DCAoELootExt::GetPlayerMinQuality;
+
+static bool ShouldShowMessage(Player* player)
+{
+    if (!sConfig.showMessage) return false;
+    return GetPlayerShowMessages(player->GetGUID());
+}
+
+static uint8 GetPlayerMinQualityFilter(Player* player)
+{
+    if (!player) return 0;
+    return GetPlayerMinQuality(player->GetGUID());
+}
+
+static bool ItemMeetsQualityFilter(uint32 itemId, uint8 minQuality)
+{
+    if (minQuality == 0) return true;
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+    if (!proto) return false;
+    return proto->Quality >= minQuality;
+}
+
+static bool CanPlayerLootCorpse(Player* player, Creature* creature)
+{
+    if (!player || !creature) return false;
+    if (creature->loot.empty()) return false;
+    if (creature->loot.isLooted()) return false;
+    if (sConfig.playersOnly && !player->IsPlayer()) return false;
+    if (sConfig.ignoreTapped && creature->hasLootRecipient())
+    {
+        Player* recipient = creature->GetLootRecipient();
+        if (!recipient) return false;
+        if (recipient->GetGUID() != player->GetGUID())
+        {
+            if (Group* group = player->GetGroup())
+            {
+                if (!group->IsMember(recipient->GetGUID()))
+                    return false;
+            }
+            else
+                return false;
+        }
+    }
+    if (!player->isAllowedToLoot(creature)) return false;
+    return true;
+}
+
+static bool PerformAoELoot(Player* player, Creature* mainCreature, bool forceAutoLoot = false)
+{
+    if (!player || !mainCreature) return false;
+    if (!IsPlayerAoELootEnabled(player->GetGUID()))
+    {
+        LOG_DEBUG("scripts.dc", "AoELoot: player {} has AoE loot disabled", player->GetGUID().ToString());
+        return false;
+    }
+
+    Loot* mainLoot = &mainCreature->loot;
+    if (!mainLoot) return false;
+
+    PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+    float lootRange = prefs.lootRange;
+    if (lootRange < 5.0f || lootRange > 100.0f)
+        lootRange = sConfig.range;
+
+    std::list<Creature*> nearby;
+    player->GetDeadCreatureListInGrid(nearby, lootRange);
+
+    LOG_DEBUG("scripts.dc", "AoELoot: found {} nearby dead creatures for player {}", nearby.size(), player->GetGUID().ToString());
+
+    nearby.remove_if([&](Creature* c) -> bool {
+        if (!c) return true;
+        if (c->GetGUID() == mainCreature->GetGUID()) return true;
+        if (!c->HasDynamicFlag(UNIT_DYNFLAG_LOOTABLE)) return true;
+        if (c->loot.empty()) return true;
+        if (c->loot.isLooted()) return true;
+        if (!player->isAllowedToLoot(c)) return true;
+        return false;
+    });
+
+    uint8 playerMinQuality = GetPlayerMinQualityFilter(player);
+    if (player->GetGroup())
+        playerMinQuality = 0;
+
+    bool const goldOnly = prefs.goldOnly;
+    bool const autoVendorPoor = prefs.autoVendorPoor;
+
+    uint32 autoVendoredItems = 0;
+    uint32 autoVendoredCopper = 0;
+
+    auto shouldSkipItem = [&](LootItem const& item, bool updateFilterStats) -> bool
+    {
+        if (item.needs_quest)
+            return false;
+
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item.itemid);
+
+        if (goldOnly)
+        {
+            if (updateFilterStats && proto)
+                UpdateFilteredStats(player->GetGUID(), proto->Quality);
+            return true;
+        }
+
+        if (IsItemIgnoredByPlayer(player, item.itemid))
+        {
+            if (updateFilterStats && proto)
+                UpdateFilteredStats(player->GetGUID(), proto->Quality);
+            return true;
+        }
+
+        if (autoVendorPoor && proto && proto->Quality == ITEM_QUALITY_POOR && proto->SellPrice > 0)
+        {
+            uint32 itemCopper = GetAutoVendorCopper(item.itemid, item.count);
+            if (itemCopper > std::numeric_limits<uint32>::max() - autoVendoredCopper)
+                autoVendoredCopper = std::numeric_limits<uint32>::max();
+            else
+                autoVendoredCopper += itemCopper;
+
+            if (item.count > std::numeric_limits<uint32>::max() - autoVendoredItems)
+                autoVendoredItems = std::numeric_limits<uint32>::max();
+            else
+                autoVendoredItems += item.count;
+
+            return true;
+        }
+
+        if (!ItemMeetsQualityFilter(item.itemid, playerMinQuality))
+        {
+            if (updateFilterStats && proto)
+                UpdateFilteredStats(player->GetGUID(), proto->Quality);
+            return true;
+        }
+
+        return false;
+    };
+
+    auto shouldAutoLootForPlayer = [&](Player* p) -> bool {
+        if (!p) return false;
+        if (forceAutoLoot && !p->GetGroup()) return true;
+        if (sConfig.autoLoot == 1) return true;
+        if (sConfig.autoLoot == 2)
+        {
+            auto it = sPlayerAutoStoreTimestamp.find(p->GetGUID());
+            if (it == sPlayerAutoStoreTimestamp.end()) return false;
+            uint64 now = GameTime::GetGameTime().count();
+            return (now - it->second) <= sConfig.autoStoreWindowSeconds;
+        }
+        return false;
+    };
+
+    if (nearby.empty())
+    {
+        if (playerMinQuality > 0 || goldOnly || autoVendorPoor || !prefs.ignoredItemIds.empty())
+        {
+            size_t initialItems = mainLoot->items.size();
+            mainLoot->items.erase(
+                std::remove_if(mainLoot->items.begin(), mainLoot->items.end(),
+                    [&](LootItem const& item)
+                    {
+                        return shouldSkipItem(item, true);
+                    }),
+                mainLoot->items.end()
+            );
+            size_t const removedCount = initialItems - mainLoot->items.size();
+            if (removedCount >= mainLoot->unlootedCount)
+                mainLoot->unlootedCount = 0;
+            else
+                mainLoot->unlootedCount -= removedCount;
+
+            if (mainLoot->items.empty() && mainLoot->quest_items.empty() && mainLoot->gold == 0)
+            {
+                mainLoot->clear();
+                mainCreature->AllLootRemovedFromCorpse();
+                mainCreature->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
+                if (autoVendoredCopper > 0)
+                    CreditAutoVendorGold(player, autoVendoredCopper, autoVendoredItems);
+                return true;
+            }
+        }
+
+        if (autoVendoredCopper > 0)
+            CreditAutoVendorGold(player, autoVendoredCopper, autoVendoredItems);
+
+        if (shouldAutoLootForPlayer(player))
+        {
+            std::vector<std::pair<uint32, uint32>> mailItems;
+            auto storeOrMail = [&](LootItem& li) {
+                if (li.is_blocked || li.is_looted) return;
+                ItemPosCountVec dest;
+                InventoryResult msg = player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, li.itemid, li.count);
+                if (msg == EQUIP_ERR_OK)
+                {
+                    Item* newItem = player->StoreNewItem(dest, li.itemid, true, li.randomPropertyId);
+                    if (newItem) player->SendNewItem(newItem, uint32(li.count), false, false, true);
+                }
+                else
+                    mailItems.emplace_back(li.itemid, uint32(li.count));
+
+                li.is_looted = true;
+                li.count = 0;
+                if (mainLoot->unlootedCount > 0) --mainLoot->unlootedCount;
+            };
+
+            for (auto& li : mainLoot->items) storeOrMail(li);
+            for (auto& li : mainLoot->quest_items) storeOrMail(li);
+
+            if (mainLoot->gold > 0)
+            {
+                player->ModifyMoney(mainLoot->gold);
+                player->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_LOOT_MONEY, mainLoot->gold);
+                mainLoot->gold = 0;
+            }
+            if (!mailItems.empty())
+            {
+                CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+                MailSender sender(mainCreature);
+                MailDraft draft("Recovered Items", "Some items could not fit in your bags.");
+                for (auto const& p : mailItems)
+                {
+                    if (Item* mailItem = Item::CreateItem(p.first, p.second))
+                    {
+                        mailItem->SaveToDB(trans);
+                        draft.AddItem(mailItem);
+                    }
+                }
+                draft.SendMailTo(trans, MailReceiver(player), sender);
+                CharacterDatabase.CommitTransaction(trans);
+            }
+            if (mainLoot->isLooted())
+            {
+                mainLoot->clear();
+                mainCreature->AllLootRemovedFromCorpse();
+                mainCreature->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
+                return true;
+            }
+            player->SendLootRelease(mainCreature->GetGUID());
+            return true;
+        }
+        player->SendLoot(mainCreature->GetGUID(), LOOT_CORPSE);
+        return true;
+    }
+
+    std::vector<Creature*> corpses;
+    corpses.reserve(sConfig.maxCorpses);
+    for (Creature* c : nearby)
+    {
+        if (corpses.size() >= sConfig.maxCorpses) break;
+        corpses.push_back(c);
+    }
+
+    std::vector<LootItem> itemsToAdd;
+    std::vector<LootItem> questItemsToAdd;
+    uint32 totalGold = mainLoot->gold;
+    const size_t MAX_MERGE_SLOTS = sConfig.maxMergeSlots;
+
+    // Filter main loot
+    if (playerMinQuality > 0 || goldOnly || autoVendorPoor || !prefs.ignoredItemIds.empty())
+    {
+        size_t initialItems = mainLoot->items.size();
+        mainLoot->items.erase(
+            std::remove_if(mainLoot->items.begin(), mainLoot->items.end(),
+                [&](LootItem const& item)
+                {
+                    return shouldSkipItem(item, true);
+                }),
+            mainLoot->items.end()
+        );
+        size_t const removedCount = initialItems - mainLoot->items.size();
+        if (removedCount >= mainLoot->unlootedCount)
+            mainLoot->unlootedCount = 0;
+        else
+            mainLoot->unlootedCount -= removedCount;
+    }
+
+    size_t processed = 0;
+    for (Creature* corpse : corpses)
+    {
+        if (!corpse) continue;
+        Loot* loot = &corpse->loot;
+        if (!loot || loot->isLooted()) continue;
+
+        if (loot->gold > 0 && totalGold < std::numeric_limits<uint32>::max() - loot->gold)
+            totalGold += loot->gold;
+
+        for (auto const& it : loot->items)
+        {
+            if (!it.AllowedForPlayer(player, corpse->GetGUID())) continue;
+            if (!sConfig.questItems && it.needs_quest) continue;
+            if (shouldSkipItem(it, true))
+            {
+                continue;
+            }
+            size_t projected = mainLoot->items.size() + itemsToAdd.size() + mainLoot->quest_items.size() + questItemsToAdd.size();
+            if (projected >= MAX_MERGE_SLOTS) break;
+            itemsToAdd.push_back(it);
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(it.itemid);
+            if (proto) UpdateQualityStats(player->GetGUID(), proto->Quality);
+        }
+        for (auto const& it : loot->quest_items)
+        {
+            if (!it.AllowedForPlayer(player, corpse->GetGUID())) continue;
+            size_t projected = mainLoot->items.size() + itemsToAdd.size() + mainLoot->quest_items.size() + questItemsToAdd.size();
+            if (projected >= MAX_MERGE_SLOTS) break;
+            questItemsToAdd.push_back(it);
+            UpdateQualityStats(player->GetGUID(), 1);
+        }
+        loot->clear();
+        corpse->AllLootRemovedFromCorpse();
+        corpse->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
+        processed++;
+    }
+
+    if (autoVendoredCopper > 0)
+        CreditAutoVendorGold(player, autoVendoredCopper, autoVendoredItems);
+
+    // Do not abort if no extra corpses were merged; main corpse loot should
+    // still be processed (important for autonomous looter-pet pulses).
+
+    for (auto const& it : itemsToAdd)
+    {
+        if (mainLoot->items.size() + mainLoot->quest_items.size() >= MAX_MERGE_SLOTS) break;
+        mainLoot->items.push_back(it);
+        mainLoot->unlootedCount++;
+    }
+    for (auto const& it : questItemsToAdd)
+    {
+        if (mainLoot->items.size() + mainLoot->quest_items.size() >= MAX_MERGE_SLOTS) break;
+        mainLoot->quest_items.push_back(it);
+        mainLoot->unlootedCount++;
+    }
+
+    mainLoot->gold = totalGold;
+    uint32 mergedGold = totalGold;
+
+    PlayerAoELootData& data = sPlayerLootData[player->GetGUID()];
+    data.lastAoELoot = GameTime::GetGameTime().count();
+    data.lootedThisSession += processed;
+
+    if (Group* group = player->GetGroup())
+    {
+        LootMethod method = group->GetLootMethod();
+        if (method == MASTER_LOOT)
+        {
+            group->MasterLoot(mainLoot, mainCreature);
+        }
+        else if (method == NEED_BEFORE_GREED || method == GROUP_LOOT || method == FREE_FOR_ALL)
+        {
+            group->GroupLoot(mainLoot, mainCreature);
+        }
+    }
+
+    if (shouldAutoLootForPlayer(player))
+    {
+        std::vector<std::pair<uint32, uint32>> mailItems;
+        auto storeOrMail = [&](LootItem& li) {
+            if (li.is_blocked || li.is_looted) return;
+            ItemPosCountVec dest;
+            InventoryResult msg = player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, li.itemid, li.count);
+            if (msg == EQUIP_ERR_OK)
+            {
+                Item* newItem = player->StoreNewItem(dest, li.itemid, true, li.randomPropertyId);
+                if (newItem) player->SendNewItem(newItem, uint32(li.count), false, false, true);
+            }
+            else
+                mailItems.emplace_back(li.itemid, uint32(li.count));
+
+            li.is_looted = true;
+            li.count = 0;
+            if (mainLoot->unlootedCount > 0) --mainLoot->unlootedCount;
+        };
+        for (auto& it : mainLoot->items) storeOrMail(it);
+        for (auto& it : mainLoot->quest_items) storeOrMail(it);
+
+        if (mainLoot->gold > 0)
+        {
+            player->ModifyMoney(mainLoot->gold);
+            data.lastCreditedGold = mainLoot->gold;
+            data.accumulatedCreditedGold += mainLoot->gold;
+            mainLoot->gold = 0;
+        }
+
+        if (!mailItems.empty())
+        {
+            CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+            MailSender sender(mainCreature);
+            MailDraft draft("Recovered Items", "Items could not fit in your bags.");
+            for (auto const& p : mailItems)
+            {
+                if (Item* mailItem = Item::CreateItem(p.first, p.second))
+                {
+                    mailItem->SaveToDB(trans);
+                    draft.AddItem(mailItem);
+                }
+            }
+            draft.SendMailTo(trans, MailReceiver(player), sender);
+            CharacterDatabase.CommitTransaction(trans);
+        }
+        if (mainLoot->isLooted())
+        {
+            mainLoot->clear();
+            mainCreature->AllLootRemovedFromCorpse();
+            mainCreature->RemoveDynamicFlag(UNIT_DYNFLAG_LOOTABLE);
+            return true;
+        }
+    }
+
+    // Auto-credit gold to solo looter
+    if (mainLoot->gold > 0 && !player->GetGroup())
+    {
+        uint32 credited = mainLoot->gold;
+        player->ModifyMoney(credited);
+        mainLoot->gold = 0;
+        data.lastCreditedGold = credited;
+        data.accumulatedCreditedGold += credited;
+    }
+
+    if (shouldAutoLootForPlayer(player))
+        player->SendLootRelease(mainCreature->GetGUID());
+    else
+        player->SendLoot(mainCreature->GetGUID(), LOOT_CORPSE);
+
+    if (processed > 0)
+        UpdateDetailedStats(player->GetGUID(), static_cast<uint32>(itemsToAdd.size()), mergedGold, 0);
+
+    if (ShouldShowMessage(player) && processed > 0)
+    {
+        std::ostringstream ss;
+        ss << "|cFF00FF00[AoE Loot]|r Looted " << processed << " corpses. ";
+        if (!itemsToAdd.empty()) ss << "Items: " << itemsToAdd.size() << ". ";
+        if (mergedGold > 0) ss << "Gold: " << FormatCoins(mergedGold);
+        ChatHandler(player->GetSession()).PSendSysMessage("{}", ss.str());
+    }
+    return true;
+}
+
+namespace DCAoELootExt
+{
+
+static bool IsPathReachableForLooterPet(WorldObject const* searchAnchor, WorldObject const* target)
+{
+    if (!searchAnchor || !target)
+        return false;
+
+    if (searchAnchor->GetMap() != target->GetMap())
+        return false;
+
+    PathGenerator path(searchAnchor);
+    path.SetUseStraightPath(false);
+    bool const result = path.CalculatePath(
+        target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), false);
+
+    PathType const pathType = path.GetPathType();
+    if (!result || (pathType & PATHFIND_NOPATH))
+        return false;
+
+    if (!sConfig.looterPetPathAllowIncomplete && (pathType & PATHFIND_INCOMPLETE))
+        return false;
+
+    if (sConfig.looterPetPathRejectShortcut && (pathType & PATHFIND_SHORTCUT))
+        return false;
+
+    if (sConfig.looterPetPathMaxLength > 0.0f &&
+        path.getPathLength() > sConfig.looterPetPathMaxLength)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+static void MoveCompanionTowardTarget(Player* player, WorldObject* searchAnchor, Creature* target)
+{
+    if (!player || !searchAnchor || !target)
+        return;
+
+    Unit* anchorUnit = searchAnchor->ToUnit();
+    if (!anchorUnit)
+        return;
+
+    if (anchorUnit->GetGUID() == player->GetGUID())
+        return;
+
+    Creature* companion = anchorUnit->ToCreature();
+    if (!companion || !companion->IsAlive())
+        return;
+
+    if (companion->GetDistance(target) <= 1.5f)
+        return;
+
+    companion->GetMotionMaster()->MovePoint(
+        9001,
+        target->GetPositionX(),
+        target->GetPositionY(),
+        target->GetPositionZ());
+}
+
+bool TriggerLooterPetLootPulse(Player* player, WorldObject* searchAnchor)
+{
+    if (!player || !player->IsAlive())
+        return false;
+
+    if (!IsPlayerAoELootEnabled(player->GetGUID()))
+        return false;
+
+    if (!searchAnchor)
+        searchAnchor = player;
+
+    if (!searchAnchor->IsInWorld())
+        return false;
+
+    float lootRange = GetPlayerLootRange(player->GetGUID());
+    if (lootRange < 5.0f || lootRange > 100.0f)
+        lootRange = sConfig.range;
+
+    std::list<Creature*> nearby;
+    searchAnchor->GetDeadCreatureListInGrid(nearby, lootRange);
+
+    std::vector<std::pair<Creature*, float>> candidates;
+    candidates.reserve(nearby.size());
+
+    for (Creature* creature : nearby)
+    {
+        if (!creature)
+            continue;
+        if (!creature->HasDynamicFlag(UNIT_DYNFLAG_LOOTABLE))
+            continue;
+        if (!CanPlayerLootCorpse(player, creature))
+            continue;
+        if (player->GetGroup() && !sConfig.allowInGroup)
+            continue;
+
+        candidates.emplace_back(creature, searchAnchor->GetDistance(creature));
+    }
+
+    if (candidates.empty())
+        return false;
+
+    std::sort(candidates.begin(), candidates.end(),
+        [](std::pair<Creature*, float> const& left, std::pair<Creature*, float> const& right)
+        {
+            return left.second < right.second;
+        });
+
+    Creature* target = nullptr;
+    if (!sConfig.looterPetPathfindingEnable)
+    {
+        target = candidates.front().first;
+    }
+    else
+    {
+        uint32 const checks = std::min<uint32>(
+            sConfig.looterPetPathMaxChecks,
+            static_cast<uint32>(candidates.size()));
+
+        for (uint32 i = 0; i < checks; ++i)
+        {
+            Creature* candidate = candidates[i].first;
+            if (IsPathReachableForLooterPet(searchAnchor, candidate))
+            {
+                target = candidate;
+                break;
+            }
+        }
+
+        // Fail-open fallback: keep autonomous looting functional when
+        // path data is unavailable or all candidates are rejected.
+        if (!target)
+            target = candidates.front().first;
+    }
+
+    if (!target)
+        return false;
+
+    MoveCompanionTowardTarget(player, searchAnchor, target);
+
+    return PerformAoELoot(player, target, true);
+}
+
+bool TriggerLooterPetLootPulse(Player* player)
+{
+    return TriggerLooterPetLootPulse(player, player);
+}
+
+} // namespace DCAoELootExt
+
+// =============================================================================
+// Skinning Integration
+// =============================================================================
+
+// Can player skin creature (currently unused)
+/*
+static bool CanPlayerSkinCreature(Player* player, Creature* creature)
+{
+    if (!player || !creature) return false;
+    if (!creature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SKINNABLE)) return false;
+    uint32 requiredSkill = creature->GetCreatureTemplate()->GetRequiredLootSkill();
+    uint32 playerSkill = 0;
+    if (requiredSkill == SKILL_SKINNING) playerSkill = player->GetSkillValue(SKILL_SKINNING);
+    else if (requiredSkill == SKILL_MINING) playerSkill = player->GetSkillValue(SKILL_MINING);
+    else if (requiredSkill == SKILL_HERBALISM) playerSkill = player->GetSkillValue(SKILL_HERBALISM);
+    else if (requiredSkill == SKILL_ENGINEERING) playerSkill = player->GetSkillValue(SKILL_ENGINEERING);
+    if (playerSkill == 0) return false;
+    uint32 targetLevel = creature->GetLevel();
+    uint32 requiredLevel = targetLevel > 10 ? (targetLevel - 10) * 5 : 1;
+    return playerSkill >= requiredLevel;
+}
+*/
+
+// Auto-skin creature (currently unused - can be enabled in future)
+/*
+static void AutoSkinCreature(Player* player, Creature* creature)
+{
+    if (!sConfig.autoSkinEnabled || !CanPlayerSkinCreature(player, creature)) return;
+    creature->loot.clear();
+    creature->loot.FillLoot(creature->GetCreatureTemplate()->SkinLootId, LootTemplates_Skinning, player, true);
+    if (creature->loot.empty()) return;
+
+    for (auto const& item : creature->loot.items)
+    {
+        ItemPosCountVec dest;
+        InventoryResult msg = player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, item.itemid, item.count);
+        if (msg == EQUIP_ERR_OK)
+        {
+            Item* newItem = player->StoreNewItem(dest, item.itemid, true);
+            if (newItem) player->SendNewItem(newItem, item.count, false, false, true);
+        }
+    }
+    if (sConfig.trackDetailedStats)
+        sDetailedStats[player->GetGUID()].skinnedCorpses++;
+    creature->loot.clear();
+    creature->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SKINNABLE);
+}
+*/
+
+// =============================================================================
+// Script Classes
+// =============================================================================
+
+class AoELootServerScript : public ServerScript
+{
+public:
+    AoELootServerScript() : ServerScript("AoELootServerScript") { }
+
+    bool CanPacketReceive(WorldSession* session, WorldPacket const& packet) override
+    {
+        if (!sConfig.enabled || !session) return true;
+
+        if (packet.GetOpcode() == CMSG_AUTOSTORE_LOOT_ITEM)
+        {
+            Player* player = session->GetPlayer();
+            if (!player) return true;
+            sPlayerAutoStoreTimestamp[player->GetGUID()] = GameTime::GetGameTime().count();
+
+            PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+            uint8 playerMinQuality = GetPlayerMinQualityFilter(player);
+            if (playerMinQuality > 0 || prefs.goldOnly || !prefs.ignoredItemIds.empty())
+            {
+                WorldPacket p(packet);
+                p.rpos(0);
+                uint8 lootSlot;
+                p >> lootSlot;
+
+                Loot* loot = nullptr;
+                ObjectGuid lootGuid = player->GetLootGUID();
+                if (lootGuid.IsCreatureOrVehicle())
+                {
+                    if (Creature* creature = player->GetMap()->GetCreature(lootGuid))
+                        loot = &creature->loot;
+                }
+                else if (lootGuid.IsCorpse())
+                {
+                    if (Corpse* corpse = ObjectAccessor::GetCorpse(*player, lootGuid))
+                        loot = &corpse->loot;
+                }
+                if (loot && lootSlot < loot->items.size())
+                {
+                    LootItem const& lootItem = loot->items[lootSlot];
+                    if (!lootItem.needs_quest)
+                    {
+                        uint32 itemId = lootItem.itemid;
+                        if (prefs.goldOnly)
+                            return false;
+                        if (IsItemIgnoredByPlayer(player, itemId))
+                            return false;
+                        if (itemId > 0 && !ItemMeetsQualityFilter(itemId, playerMinQuality))
+                            return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        if (packet.GetOpcode() != CMSG_LOOT) return true;
+
+        Player* player = session->GetPlayer();
+        if (!player) return true;
+
+        WorldPacket p(packet);
+        p.rpos(0);
+        ObjectGuid guid;
+        p >> guid;
+
+        if (!guid || !guid.IsCreature()) return true;
+
+        Creature* creature = ObjectAccessor::GetCreature(*player, guid);
+        if (!creature) return true;
+
+        if (!IsPlayerAoELootEnabled(player->GetGUID())) return true;
+        if (!creature->HasDynamicFlag(UNIT_DYNFLAG_LOOTABLE)) return true;
+        if (!CanPlayerLootCorpse(player, creature)) return true;
+        if (player->GetGroup() && !sConfig.allowInGroup) return true;
+
+        bool handled = PerformAoELoot(player, creature);
+        return !handled;
+    }
+};
+
+class AoELootPlayerScript : public PlayerScript
+{
+public:
+    AoELootPlayerScript() : PlayerScript("AoELootPlayerScript") { }
+
+    void OnPlayerLogin(Player* player) override
+    {
+        if (!player) return;
+
+        // Initialize preferences
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.aoeLootEnabled = true;
+        prefs.showMessages = true;
+        prefs.minQuality = 0;
+        prefs.autoSkin = sConfig.autoSkinEnabled;
+        prefs.smartLootEnabled = true;
+        prefs.autoVendorPoor = sConfig.autoVendorPoorItems;
+        prefs.goldOnly = false;
+        prefs.lootRange = sConfig.range;
+        prefs.ignoredItemIds.clear();
+        prefs.activePreset = 0;
+
+        PreferenceSchemaInfo const& schema = GetPreferenceSchemaInfo();
+
+        std::vector<std::string> columns =
+        {
+            "aoe_enabled",
+            "min_quality",
+            "auto_skin",
+            "smart_loot"
+        };
+
+        if (schema.hasShowMessages)
+            columns.push_back("show_messages");
+        if (schema.hasAutoVendorPoor)
+            columns.push_back("auto_vendor_poor");
+        if (schema.hasIgnoredItems)
+            columns.push_back("ignored_items");
+        if (schema.hasGoldOnly)
+            columns.push_back("gold_only");
+        if (schema.hasLootRange)
+            columns.push_back("loot_range");
+        if (schema.hasActivePreset)
+            columns.push_back("active_preset");
+
+        std::string query = Acore::StringFormat(
+            "SELECT {} FROM dc_aoeloot_preferences WHERE player_guid = {}",
+            JoinStringList(columns), player->GetGUID().GetCounter());
+
+        QueryResult result = CharacterDatabase.Query(query);
+
+        if (result)
+        {
+            Field* f = result->Fetch();
+            uint8 idx = 0;
+            prefs.aoeLootEnabled = f[idx++].Get<bool>();
+            prefs.minQuality = f[idx++].Get<uint8>();
+            if (prefs.minQuality > 6) prefs.minQuality = 6;
+            prefs.autoSkin = f[idx++].Get<bool>();
+            prefs.smartLootEnabled = f[idx++].Get<bool>();
+
+            if (schema.hasShowMessages)
+                prefs.showMessages = f[idx++].Get<bool>();
+
+            if (schema.hasAutoVendorPoor)
+                prefs.autoVendorPoor = f[idx++].Get<bool>();
+
+            if (schema.hasIgnoredItems)
+                ParseIgnoredItems(f[idx++].Get<std::string>(), prefs.ignoredItemIds);
+
+            if (schema.hasGoldOnly)
+                prefs.goldOnly = f[idx++].Get<bool>();
+
+            if (schema.hasLootRange)
+            {
+                prefs.lootRange = f[idx++].Get<float>();
+                if (prefs.lootRange < 5.0f || prefs.lootRange > 100.0f)
+                    prefs.lootRange = sConfig.range;
+            }
+
+            if (schema.hasActivePreset)
+            {
+                prefs.activePreset = f[idx++].Get<uint8>();
+                if (prefs.activePreset > LOOT_PRESET_CUSTOM)
+                    prefs.activePreset = 0;
+            }
+        }
+
+        // Load detailed stats
+        if (sConfig.trackDetailedStats)
+        {
+            QueryResult statsResult = CharacterDatabase.Query(
+                "SELECT total_items, total_gold, poor_vendored, vendor_gold, skinned, mined, herbed, upgrades, "
+                "quality_poor, quality_common, quality_uncommon, quality_rare, quality_epic, quality_legendary, "
+                "filtered_poor, filtered_common, filtered_uncommon, filtered_rare, filtered_epic, filtered_legendary, "
+                "mythic_bonus_items "
+                "FROM dc_aoeloot_detailed_stats WHERE player_guid = {}",
+                player->GetGUID().GetCounter());
+            if (statsResult)
+            {
+                Field* f = statsResult->Fetch();
+                DetailedLootStats& stats = sDetailedStats[player->GetGUID()];
+                stats.totalItemsLooted = f[0].Get<uint32>();
+                stats.totalGoldLooted = f[1].Get<uint32>();
+                stats.poorItemsVendored = f[2].Get<uint32>();
+                stats.goldFromVendor = f[3].Get<uint32>();
+                stats.skinnedCorpses = f[4].Get<uint32>();
+                stats.minedNodes = f[5].Get<uint32>();
+                stats.herbedNodes = f[6].Get<uint32>();
+                stats.upgradesFound = f[7].Get<uint32>();
+                stats.qualityPoor = f[8].Get<uint32>();
+                stats.qualityCommon = f[9].Get<uint32>();
+                stats.qualityUncommon = f[10].Get<uint32>();
+                stats.qualityRare = f[11].Get<uint32>();
+                stats.qualityEpic = f[12].Get<uint32>();
+                stats.qualityLegendary = f[13].Get<uint32>();
+                stats.filteredPoor = f[14].Get<uint32>();
+                stats.filteredCommon = f[15].Get<uint32>();
+                stats.filteredUncommon = f[16].Get<uint32>();
+                stats.filteredRare = f[17].Get<uint32>();
+                stats.filteredEpic = f[18].Get<uint32>();
+                stats.filteredLegendary = f[19].Get<uint32>();
+                stats.mythicBonusItems = f[20].Get<uint32>();
+            }
+        }
+
+        // Initialize session data
+        PlayerAoELootData& data = sPlayerLootData[player->GetGUID()];
+        data = PlayerAoELootData();
+
+        if (ShouldShowMessage(player))
+            ChatHandler(player->GetSession()).PSendSysMessage("|cFF00FF00[AoE Loot]|r System enabled.");
+    }
+
+    void OnPlayerLogout(Player* player) override
+    {
+        if (!player) return;
+
+        // Save preferences
+        auto prefIt = sPlayerPrefs.find(player->GetGUID());
+        if (prefIt != sPlayerPrefs.end())
+        {
+            PlayerLootPreferences& prefs = prefIt->second;
+            PreferenceSchemaInfo const& schema = GetPreferenceSchemaInfo();
+
+            std::vector<std::string> columns =
+            {
+                "player_guid",
+                "aoe_enabled",
+                "min_quality",
+                "auto_skin",
+                "smart_loot"
+            };
+
+            std::vector<std::string> values =
+            {
+                std::to_string(player->GetGUID().GetCounter()),
+                prefs.aoeLootEnabled ? "1" : "0",
+                std::to_string(prefs.minQuality),
+                prefs.autoSkin ? "1" : "0",
+                prefs.smartLootEnabled ? "1" : "0"
+            };
+
+            std::vector<std::string> updates =
+            {
+                "aoe_enabled = VALUES(aoe_enabled)",
+                "min_quality = VALUES(min_quality)",
+                "auto_skin = VALUES(auto_skin)",
+                "smart_loot = VALUES(smart_loot)"
+            };
+
+            if (schema.hasShowMessages)
+            {
+                columns.push_back("show_messages");
+                values.push_back(prefs.showMessages ? "1" : "0");
+                updates.push_back("show_messages = VALUES(show_messages)");
+            }
+
+            if (schema.hasAutoVendorPoor)
+            {
+                columns.push_back("auto_vendor_poor");
+                values.push_back(prefs.autoVendorPoor ? "1" : "0");
+                updates.push_back("auto_vendor_poor = VALUES(auto_vendor_poor)");
+            }
+
+            if (schema.hasIgnoredItems)
+            {
+                columns.push_back("ignored_items");
+                values.push_back(Acore::StringFormat("'{}'", EscapeSqlString(SerializeIgnoredItems(prefs.ignoredItemIds))));
+                updates.push_back("ignored_items = VALUES(ignored_items)");
+            }
+
+            if (schema.hasGoldOnly)
+            {
+                columns.push_back("gold_only");
+                values.push_back(prefs.goldOnly ? "1" : "0");
+                updates.push_back("gold_only = VALUES(gold_only)");
+            }
+
+            if (schema.hasLootRange)
+            {
+                float persistedRange = prefs.lootRange;
+                if (persistedRange < 5.0f || persistedRange > 100.0f)
+                    persistedRange = sConfig.range;
+
+                columns.push_back("loot_range");
+                values.push_back(Acore::StringFormat("{}", persistedRange));
+                updates.push_back("loot_range = VALUES(loot_range)");
+            }
+
+            if (schema.hasActivePreset)
+            {
+                uint8 activePreset = prefs.activePreset;
+                if (activePreset > LOOT_PRESET_CUSTOM)
+                    activePreset = 0;
+
+                columns.push_back("active_preset");
+                values.push_back(std::to_string(activePreset));
+                updates.push_back("active_preset = VALUES(active_preset)");
+            }
+
+            CharacterDatabase.Execute(Acore::StringFormat(
+                "INSERT INTO dc_aoeloot_preferences ({}) VALUES ({}) ON DUPLICATE KEY UPDATE {}",
+                JoinStringList(columns), JoinStringList(values), JoinStringList(updates)));
+
+            sPlayerPrefs.erase(prefIt);
+        }
+
+        // Save detailed stats
+        if (sConfig.trackDetailedStats)
+        {
+            auto statsIt = sDetailedStats.find(player->GetGUID());
+            if (statsIt != sDetailedStats.end())
+            {
+                DetailedLootStats& stats = statsIt->second;
+                CharacterDatabase.Execute(
+                    "REPLACE INTO dc_aoeloot_detailed_stats "
+                    "(player_guid, total_items, total_gold, poor_vendored, vendor_gold, skinned, mined, herbed, upgrades, "
+                    "quality_poor, quality_common, quality_uncommon, quality_rare, quality_epic, quality_legendary, "
+                    "filtered_poor, filtered_common, filtered_uncommon, filtered_rare, filtered_epic, filtered_legendary, "
+                    "mythic_bonus_items) "
+                    "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})",
+                    player->GetGUID().GetCounter(),
+                    stats.totalItemsLooted, stats.totalGoldLooted, stats.poorItemsVendored,
+                    stats.goldFromVendor, stats.skinnedCorpses, stats.minedNodes, stats.herbedNodes, stats.upgradesFound,
+                    stats.qualityPoor, stats.qualityCommon, stats.qualityUncommon, stats.qualityRare,
+                    stats.qualityEpic, stats.qualityLegendary, stats.filteredPoor, stats.filteredCommon,
+                    stats.filteredUncommon, stats.filteredRare, stats.filteredEpic, stats.filteredLegendary,
+                    stats.mythicBonusItems);
+                sDetailedStats.erase(statsIt);
+            }
+        }
+
+        sPlayerLootData.erase(player->GetGUID());
+        sPlayerAutoStoreTimestamp.erase(player->GetGUID());
+    }
+};
+
+class AoELootCommandScript : public CommandScript
+{
+public:
+    AoELootCommandScript() : CommandScript("AoELootCommandScript") { }
+
+    ChatCommandTable GetCommands() const override
+    {
+        static ChatCommandTable aoelootTable =
+        {
+            { "toggle",   HandleToggle,   SEC_PLAYER,        Console::No },
+            { "enable",   HandleEnable,   SEC_PLAYER,        Console::No },
+            { "disable",  HandleDisable,  SEC_PLAYER,        Console::No },
+            { "messages", HandleMessages, SEC_PLAYER,        Console::No },
+            { "msg",      HandleMessages, SEC_PLAYER,        Console::No },
+            { "quality",  HandleQuality,  SEC_PLAYER,        Console::No },
+            { "skin",     HandleSkin,     SEC_PLAYER,        Console::No },
+            { "skinset",  HandleSkin,     SEC_PLAYER,        Console::No },
+            { "smart",    HandleSmart,    SEC_PLAYER,        Console::No },
+            { "smartset", HandleSmart,    SEC_PLAYER,        Console::No },
+            { "goldonly", HandleGoldOnly, SEC_PLAYER,        Console::No },
+            { "autovendor", HandleAutoVendor, SEC_PLAYER,    Console::No },
+            { "ignore",   HandleIgnoreItem, SEC_PLAYER,      Console::No },
+            { "stats",    HandleStats,    SEC_PLAYER,        Console::No },
+            { "info",     HandleInfo,     SEC_PLAYER,        Console::No },
+            { "reload",   HandleReload,   SEC_ADMINISTRATOR, Console::No },
+        };
+
+        static ChatCommandTable commandTable =
+        {
+            { "aoeloot", aoelootTable },
+            { "lp",      aoelootTable },  // Shortcut
+        };
+
+        return commandTable;
+    }
+
+    static bool HandleToggle(ChatHandler* handler, Optional<bool> enabled = {})
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.aoeLootEnabled = enabled.value_or(!prefs.aoeLootEnabled);
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r {}", prefs.aoeLootEnabled ? "Enabled" : "Disabled");
+        return true;
+    }
+
+    static bool HandleEnable(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        sPlayerPrefs[player->GetGUID()].aoeLootEnabled = true;
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Enabled");
+        return true;
+    }
+
+    static bool HandleDisable(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        sPlayerPrefs[player->GetGUID()].aoeLootEnabled = false;
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Disabled");
+        return true;
+    }
+
+    static bool HandleMessages(ChatHandler* handler, Optional<bool> enabled = {})
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.showMessages = enabled.value_or(!prefs.showMessages);
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Messages: {}", prefs.showMessages ? "On" : "Off");
+        return true;
+    }
+
+    static bool HandleQuality(ChatHandler* handler, uint8 quality)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        if (quality > 6) quality = 6;
+        sPlayerPrefs[player->GetGUID()].minQuality = quality;
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Min quality: {}", GetQualityName(quality));
+        return true;
+    }
+
+    static bool HandleSkin(ChatHandler* handler, Optional<bool> enabled = {})
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.autoSkin = enabled.value_or(!prefs.autoSkin);
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Auto-Skin: {}", prefs.autoSkin ? "On" : "Off");
+        return true;
+    }
+
+    static bool HandleSmart(ChatHandler* handler, Optional<bool> enabled = {})
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.smartLootEnabled = enabled.value_or(!prefs.smartLootEnabled);
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Smart Loot: {}", prefs.smartLootEnabled ? "On" : "Off");
+        return true;
+    }
+
+    static bool HandleGoldOnly(ChatHandler* handler, Optional<bool> enabled = {})
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.goldOnly = enabled.value_or(!prefs.goldOnly);
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Gold-only mode: {}", prefs.goldOnly ? "On" : "Off");
+        return true;
+    }
+
+    static bool HandleAutoVendor(ChatHandler* handler, Optional<bool> enabled = {})
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        prefs.autoVendorPoor = enabled.value_or(!prefs.autoVendorPoor);
+        handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Auto-vendor poor items: {}", prefs.autoVendorPoor ? "On" : "Off");
+        return true;
+    }
+
+    static bool HandleIgnoreItem(ChatHandler* handler, uint32 itemId)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+        if (!itemId)
+        {
+            handler->SendSysMessage("|cffff0000[AoE Loot]|r Invalid item id.");
+            return true;
+        }
+
+        auto& ignored = sPlayerPrefs[player->GetGUID()].ignoredItemIds;
+        auto it = ignored.find(itemId);
+        if (it == ignored.end())
+        {
+            ignored.insert(itemId);
+            handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Item {} added to ignore list.", itemId);
+        }
+        else
+        {
+            ignored.erase(it);
+            handler->PSendSysMessage("|cff00ff00[AoE Loot]|r Item {} removed from ignore list.", itemId);
+        }
+        return true;
+    }
+
+    static bool HandleStats(ChatHandler* handler)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player) return true;
+
+        PlayerLootPreferences& prefs = sPlayerPrefs[player->GetGUID()];
+        handler->SendSysMessage("|cff00ff00========== AoE LOOT SETTINGS ==========|r");
+        handler->PSendSysMessage("Enabled: {}", prefs.aoeLootEnabled ? "Yes" : "No");
+        handler->PSendSysMessage("Messages: {}", prefs.showMessages ? "On" : "Off");
+        handler->PSendSysMessage("Min Quality: {}", GetQualityName(prefs.minQuality));
+        handler->PSendSysMessage("Auto-Skin: {}", prefs.autoSkin ? "On" : "Off");
+        handler->PSendSysMessage("Smart Loot: {}", prefs.smartLootEnabled ? "On" : "Off");
+        handler->PSendSysMessage("Gold-Only: {}", prefs.goldOnly ? "On" : "Off");
+        handler->PSendSysMessage("Auto-Vendor Poor: {}", prefs.autoVendorPoor ? "On" : "Off");
+        handler->PSendSysMessage("Ignored Items: {}", static_cast<uint32>(prefs.ignoredItemIds.size()));
+
+        auto it = sDetailedStats.find(player->GetGUID());
+        if (it != sDetailedStats.end())
+        {
+            DetailedLootStats& s = it->second;
+            handler->SendSysMessage("|cff00ff00========== STATISTICS ==========|r");
+            handler->PSendSysMessage("Items Looted: {}", s.totalItemsLooted);
+            handler->PSendSysMessage("Gold Looted: {}", FormatCoins(s.totalGoldLooted));
+            handler->PSendSysMessage("Skinned: {}", s.skinnedCorpses);
+        }
+        return true;
+    }
+
+    static bool HandleInfo(ChatHandler* handler)
+    {
+        handler->PSendSysMessage("AoE Loot: {}", sConfig.enabled ? "Enabled" : "Disabled");
+        if (sConfig.enabled)
+        {
+            handler->PSendSysMessage("  Range: {:.1f} yards", sConfig.range);
+            handler->PSendSysMessage("  Max Corpses: {}", sConfig.maxCorpses);
+        }
+        return true;
+    }
+
+    static bool HandleReload(ChatHandler* handler)
+    {
+        sConfig.Load();
+        handler->SendSysMessage("AoE Loot configuration reloaded.");
+        return true;
+    }
+};
+
+class AoELootWorldScript : public WorldScript
+{
+public:
+    AoELootWorldScript() : WorldScript("AoELootWorldScript") { }
+
+    void OnStartup() override
+    {
+        sConfig.Load();
+        LOG_INFO("scripts.dc", "DarkChaos AoE Loot Unified initialized (Enabled: {})", sConfig.enabled ? "Yes" : "No");
+    }
+};
+
+void AddSC_dc_aoeloot_unified()
+{
+    sConfig.Load();
+    new AoELootServerScript();
+    new AoELootPlayerScript();
+    new AoELootCommandScript();
+    new AoELootWorldScript();
+}
