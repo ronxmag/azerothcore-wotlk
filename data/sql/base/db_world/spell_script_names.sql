@@ -2498,7 +2498,6 @@ INSERT INTO `spell_script_names` VALUES
 (71406,'spell_item_tiny_abomination_in_a_jar'),
 (71441,'spell_rotface_unstable_ooze_explosion_suicide_aura'),
 (71450,'spell_gen_aura_service_uniform'),
-(71462,'spell_svalna_remove_spear'),
 (71474,'spell_blood_queen_frenzied_bloodthirst_aura'),
 (71475,'spell_blood_queen_vampiric_bite'),
 (71476,'spell_blood_queen_vampiric_bite'),
