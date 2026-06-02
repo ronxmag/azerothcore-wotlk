@@ -9399,6 +9399,12 @@ void Player::Say(std::string_view text, Language language, WorldObject const* /*
     if (!sScriptMgr->OnPlayerCanUseChat(this, CHAT_MSG_SAY, language, _text))
         return;
 
+    if (sWorld->getBoolConfig(CONFIG_CHAT_FILTER_SAY) && IsChatFiltered(text))
+    {
+        ChatHandler(GetSession()).SendSysMessage(LANG_CHATFILTER_SAY);
+        return;
+    }
+
     WorldPacket data;
     ChatHandler::BuildChatPacket(data, CHAT_MSG_SAY, language, this, this, _text);
 
@@ -9421,6 +9427,12 @@ void Player::Yell(std::string_view text, Language language, WorldObject const* /
     if (!sScriptMgr->OnPlayerCanUseChat(this, CHAT_MSG_YELL, language, _text))
         return;
 
+    if (sWorld->getBoolConfig(CONFIG_CHAT_FILTER_YELL) && IsChatFiltered(text))
+    {
+        ChatHandler(GetSession()).SendSysMessage(LANG_CHATFILTER_YELL);
+        return;
+    }
+
     WorldPacket data;
     ChatHandler::BuildChatPacket(data, CHAT_MSG_YELL, language, this, this, _text);
 
@@ -9442,6 +9454,12 @@ void Player::TextEmote(std::string_view text, WorldObject const* /*= nullptr*/, 
 
     if (!sScriptMgr->OnPlayerCanUseChat(this, CHAT_MSG_EMOTE, LANG_UNIVERSAL, _text))
         return;
+
+    if (sWorld->getBoolConfig(CONFIG_CHAT_FILTER_EMOTE) && IsChatFiltered(text))
+    {
+        ChatHandler(GetSession()).SendSysMessage(LANG_CHATFILTER_EMOTE);
+        return;
+    }
 
     WorldPacket data;
     ChatHandler::BuildChatPacket(data, CHAT_MSG_EMOTE, LANG_UNIVERSAL, this, this, _text);
@@ -9472,15 +9490,24 @@ void Player::Whisper(std::string_view text, Language language, Player* target, b
     if (!sScriptMgr->OnPlayerCanUseChat(this, CHAT_MSG_WHISPER, language, _text, target))
         return;
 
+    bool isFiltered = sWorld->getBoolConfig(CONFIG_CHAT_FILTER_WHISPER) && IsChatFiltered(text);
+
     WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, language, this, this, _text);
-    target->SendDirectMessage(&data);
+    if (!isFiltered || isAddonMessage)
+    {
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, language, this, this, _text);
+        target->SendDirectMessage(&data);
+    }
 
     // rest stuff shouldn't happen in case of addon message
     if (isAddonMessage)
         return;
 
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER_INFORM, Language(language), target, target, _text);
+    ChatMsg msgType = CHAT_MSG_WHISPER_INFORM;
+    if (isFiltered)
+        msgType = CHAT_MSG_FILTERED;
+
+    ChatHandler::BuildChatPacket(data, msgType, Language(language), target, target, _text);
     SendDirectMessage(&data);
 
     if (!isAcceptWhispers() && !IsGameMaster() && !target->IsGameMaster())
@@ -9519,6 +9546,11 @@ void Player::Whisper(uint32 textId, Player* target, bool isBossWhisper)
     else
         ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, LANG_UNIVERSAL, this, target, bct->GetText(locale, getGender()), 0, "", locale);
     target->SendDirectMessage(&data);
+}
+
+bool Player::IsChatFiltered(std::string_view text)
+{
+    return sObjectMgr->IsChatFiltered(text);
 }
 
 void Player::PetSpellInitialize()
@@ -13117,6 +13149,11 @@ PartyResult Player::CanUninviteFromGroup(ObjectGuid targetPlayerGUID) const
 
         if (InBattleground())
             return ERR_INVITE_RESTRICTED;
+
+        // BF raids are owned by the Battlefield system; leaders/assistants must not
+        // be able to kick members (would drop their team assignment mid-battle).
+        if (grp->isBFGroup())
+            return ERR_NOT_LEADER;
     }
 
     return ERR_PARTY_RESULT_OK;

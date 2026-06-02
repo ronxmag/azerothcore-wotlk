@@ -3691,6 +3691,18 @@ Wintergrasp.SkipBattleSessionCount = 3500
 Wintergrasp.KickVoAPlayers = 1
 
 #
+#     Wintergrasp.EssenceBothFactions
+#         Description: Grant the "Essence of Wintergrasp" buff to both factions
+#                      during peacetime, regardless of who controls the keep.
+#                      The wartime suppression still applies; this only affects
+#                      who receives the buff once the battle is over.
+#         Default:     0 - (Disabled, only the defending faction gets the buff)
+#                      1 - (Enabled, attackers and defenders both get the buff,
+#                           so both factions can access Vault of Archavon)
+
+Wintergrasp.EssenceBothFactions = 0
+
+#
 ###################################################################################################
 
 ###################################################################################################
@@ -4370,6 +4382,21 @@ PreserveCustomChannels = 0
 #                     0  - (Disabled, Infinite channel storage)
 
 PreserveCustomChannelDuration = 14
+
+#
+#    ChatFilter
+#        Description: Blocks chat messages when they contain any entry from the `chat_filter`
+#                     table (substring, case-insensitive).
+#                     Manage entries with .chatfilter add / remove / list and .reload chat_filter.
+#                     Blizzlike is only whispers are enabled.
+#        Default:     0 - (Disbaled)
+#                     1 - (Enabled)
+#
+
+ChatFilter.Whisper = 1
+ChatFilter.Say     = 0
+ChatFilter.Yell    = 0
+ChatFilter.Emote   = 0
 
 #
 ###################################################################################################
