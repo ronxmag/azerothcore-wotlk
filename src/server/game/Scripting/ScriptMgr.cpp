@@ -22,20 +22,82 @@
 #include "ScriptSystem.h"
 #include "SmartAI.h"
 #include "SpellMgr.h"
+#include "Utilities/TypeList.h"
 #include "UnitAI.h"
 
 namespace
 {
-    template<typename T>
-    inline void SCR_CLEAR()
+    // Metadata for the script-registry operations derived in this file.
+    // EnabledHooks is the legacy *_HOOK_END count for enabled-hook dispatch.
+    // LegacyDbValidationCandidate preserves the old database-validation search set.
+    template<typename Script, uint16 EnabledHookCountValue = 0, bool PromotedAfterDbLoadValue = false, bool LegacyDbValidationValue = false>
+    struct ScriptTypeInfo
     {
-        for (auto const& [scriptID, script] : ScriptRegistry<T>::ScriptPointerList)
-        {
-            delete script;
-        }
+        using type = Script;
+        static constexpr uint16 EnabledHooks = EnabledHookCountValue;
+        static constexpr bool HasEnabledHooks = EnabledHookCountValue > 0;
+        static constexpr bool PromotedAfterDbLoad = PromotedAfterDbLoadValue;
+        static constexpr bool LegacyDbValidationCandidate = LegacyDbValidationValue;
+    };
 
-        ScriptRegistry<T>::ScriptPointerList.clear();
-    }
+    //                 script type                hooks                    afterLoad  dbCheck
+    using ScriptRegistryTypes = Acore::type_list<
+        ScriptTypeInfo<AccountScript,             ACCOUNTHOOK_END>,
+        ScriptTypeInfo<AchievementCriteriaScript, 0,                       true,      true>,
+        ScriptTypeInfo<AchievementScript,         ACHIEVEMENTHOOK_END,     false,     true>,
+        ScriptTypeInfo<AllCreatureScript>,
+        ScriptTypeInfo<AllGameObjectScript>,
+        ScriptTypeInfo<AllItemScript>,
+        ScriptTypeInfo<AllMapScript,              ALLMAPHOOK_END>,
+        ScriptTypeInfo<AreaTriggerScript,         0,                       true,      true>,
+        ScriptTypeInfo<ArenaScript,               ARENAHOOK_END,           false,     true>,
+        ScriptTypeInfo<ArenaTeamScript,           ARENATEAMHOOK_END,       false,     true>,
+        ScriptTypeInfo<AuctionHouseScript,        AUCTIONHOUSEHOOK_END,    false,     true>,
+        ScriptTypeInfo<BattlefieldScript,         BATTLEFIELDHOOK_END>,
+        ScriptTypeInfo<BGScript,                  ALLBATTLEGROUNDHOOK_END, false,     true>,
+        ScriptTypeInfo<BattlegroundMapScript,     0,                       true,      true>,
+        ScriptTypeInfo<BattlegroundScript,        0,                       true,      true>,
+        ScriptTypeInfo<CommandSC,                 ALLCOMMANDHOOK_END,      false,     true>,
+        ScriptTypeInfo<CommandScript,             0,                       false,     true>,
+        ScriptTypeInfo<ConditionScript,           0,                       true,      true>,
+        ScriptTypeInfo<CreatureScript,            0,                       true,      true>,
+        ScriptTypeInfo<DatabaseScript,            DATABASEHOOK_END,        false,     true>,
+        ScriptTypeInfo<DynamicObjectScript,       0,                       false,     true>,
+        ScriptTypeInfo<ALEScript>,
+        ScriptTypeInfo<FormulaScript,             FORMULAHOOK_END,         false,     true>,
+        ScriptTypeInfo<GameEventScript,           GAMEEVENTHOOK_END>,
+        ScriptTypeInfo<GameObjectScript,          0,                       true,      true>,
+        ScriptTypeInfo<GlobalScript,              GLOBALHOOK_END>,
+        ScriptTypeInfo<GroupScript,               GROUPHOOK_END,           false,     true>,
+        ScriptTypeInfo<GuildScript,               GUILDHOOK_END,           false,     true>,
+        ScriptTypeInfo<InstanceMapScript,         0,                       true,      true>,
+        ScriptTypeInfo<ItemScript,                0,                       true,      true>,
+        ScriptTypeInfo<LootScript,                LOOTHOOK_END>,
+        ScriptTypeInfo<MailScript,                MAILHOOK_END>,
+        ScriptTypeInfo<MiscScript,                MISCHOOK_END,            false,     true>,
+        ScriptTypeInfo<MovementHandlerScript,     MOVEMENTHOOK_END>,
+        ScriptTypeInfo<OutdoorPvPScript,          0,                       true,      true>,
+        ScriptTypeInfo<PetScript,                 PETHOOK_END,             false,     true>,
+        ScriptTypeInfo<PlayerScript,              PLAYERHOOK_END,          false,     true>,
+        ScriptTypeInfo<ServerScript,              SERVERHOOK_END,          false,     true>,
+        ScriptTypeInfo<SpellSC,                   ALLSPELLHOOK_END,        false,     true>,
+        ScriptTypeInfo<SpellScriptLoader,         0,                       true,      true>,
+        ScriptTypeInfo<TicketScript,              TICKETHOOK_END,          false,     true>,
+        ScriptTypeInfo<TransportScript,           0,                       true,      true>,
+        ScriptTypeInfo<UnitScript,                UNITHOOK_END>,
+        ScriptTypeInfo<VehicleScript,             0,                       false,     true>,
+        ScriptTypeInfo<WeatherScript,             0,                       true,      true>,
+        ScriptTypeInfo<WorldMapScript,            0,                       true,      true>,
+        ScriptTypeInfo<WorldObjectScript,         WORLDOBJECTHOOK_END>,
+        ScriptTypeInfo<WorldScript,               WORLDHOOK_END,           false,     true>>;
+
+    // These counts mirror the four hand-maintained lists this consolidation
+    // replaced. If a flag is mistyped or a type is added without its metadata,
+    // the build fails here instead of silently drifting.
+    static_assert(Acore::size_v<ScriptRegistryTypes> == 48, "Update count when adding a script registry type");
+    static_assert(Acore::count_if<ScriptRegistryTypes>([]<typename Info>() { return Info::HasEnabledHooks; }) == 27, "Enabled-hook script type count changed");
+    static_assert(Acore::count_if<ScriptRegistryTypes>([]<typename Info>() { return Info::PromotedAfterDbLoad; }) == 14, "After-load script type count changed");
+    static_assert(Acore::count_if<ScriptRegistryTypes>([]<typename Info>() { return Info::LegacyDbValidationCandidate; }) == 34, "Database-check script type count changed");
 }
 
 struct TSpellSummary
@@ -82,33 +144,11 @@ void ScriptMgr::Initialize()
     _script_loader_callback();
     _modules_loader_callback();
 
-    ScriptRegistry<AccountScript>::InitEnabledHooksIfNeeded(ACCOUNTHOOK_END);
-    ScriptRegistry<AchievementScript>::InitEnabledHooksIfNeeded(ACHIEVEMENTHOOK_END);
-    ScriptRegistry<ArenaScript>::InitEnabledHooksIfNeeded(ARENAHOOK_END);
-    ScriptRegistry<ArenaTeamScript>::InitEnabledHooksIfNeeded(ARENATEAMHOOK_END);
-    ScriptRegistry<AuctionHouseScript>::InitEnabledHooksIfNeeded(AUCTIONHOUSEHOOK_END);
-    ScriptRegistry<BattlefieldScript>::InitEnabledHooksIfNeeded(BATTLEFIELDHOOK_END);
-    ScriptRegistry<BGScript>::InitEnabledHooksIfNeeded(ALLBATTLEGROUNDHOOK_END);
-    ScriptRegistry<CommandSC>::InitEnabledHooksIfNeeded(ALLCOMMANDHOOK_END);
-    ScriptRegistry<DatabaseScript>::InitEnabledHooksIfNeeded(DATABASEHOOK_END);
-    ScriptRegistry<FormulaScript>::InitEnabledHooksIfNeeded(FORMULAHOOK_END);
-    ScriptRegistry<GameEventScript>::InitEnabledHooksIfNeeded(GAMEEVENTHOOK_END);
-    ScriptRegistry<GlobalScript>::InitEnabledHooksIfNeeded(GLOBALHOOK_END);
-    ScriptRegistry<GroupScript>::InitEnabledHooksIfNeeded(GROUPHOOK_END);
-    ScriptRegistry<GuildScript>::InitEnabledHooksIfNeeded(GUILDHOOK_END);
-    ScriptRegistry<LootScript>::InitEnabledHooksIfNeeded(LOOTHOOK_END);
-    ScriptRegistry<MailScript>::InitEnabledHooksIfNeeded(MAILHOOK_END);
-    ScriptRegistry<MiscScript>::InitEnabledHooksIfNeeded(MISCHOOK_END);
-    ScriptRegistry<MovementHandlerScript>::InitEnabledHooksIfNeeded(MOVEMENTHOOK_END);
-    ScriptRegistry<PetScript>::InitEnabledHooksIfNeeded(PETHOOK_END);
-    ScriptRegistry<PlayerScript>::InitEnabledHooksIfNeeded(PLAYERHOOK_END);
-    ScriptRegistry<ServerScript>::InitEnabledHooksIfNeeded(SERVERHOOK_END);
-    ScriptRegistry<SpellSC>::InitEnabledHooksIfNeeded(ALLSPELLHOOK_END);
-    ScriptRegistry<TicketScript>::InitEnabledHooksIfNeeded(TICKETHOOK_END);
-    ScriptRegistry<UnitScript>::InitEnabledHooksIfNeeded(UNITHOOK_END);
-    ScriptRegistry<WorldObjectScript>::InitEnabledHooksIfNeeded(WORLDOBJECTHOOK_END);
-    ScriptRegistry<WorldScript>::InitEnabledHooksIfNeeded(WORLDHOOK_END);
-    ScriptRegistry<AllMapScript>::InitEnabledHooksIfNeeded(ALLMAPHOOK_END);
+    Acore::for_each<ScriptRegistryTypes>([]<typename Info>()
+    {
+        if constexpr (Info::HasEnabledHooks)
+            ScriptRegistry<typename Info::type>::InitEnabledHooksIfNeeded(Info::EnabledHooks);
+    });
 }
 
 void ScriptMgr::Unload()
@@ -132,21 +172,13 @@ void ScriptMgr::LoadDatabase()
 
     sScriptSystemMgr->LoadScriptWaypoints();
 
-    // Add all scripts that must be loaded after db/maps
-    ScriptRegistry<WorldMapScript>::AddALScripts();
-    ScriptRegistry<BattlegroundMapScript>::AddALScripts();
-    ScriptRegistry<InstanceMapScript>::AddALScripts();
-    ScriptRegistry<SpellScriptLoader>::AddALScripts();
-    ScriptRegistry<ItemScript>::AddALScripts();
-    ScriptRegistry<CreatureScript>::AddALScripts();
-    ScriptRegistry<GameObjectScript>::AddALScripts();
-    ScriptRegistry<AreaTriggerScript>::AddALScripts();
-    ScriptRegistry<BattlegroundScript>::AddALScripts();
-    ScriptRegistry<OutdoorPvPScript>::AddALScripts();
-    ScriptRegistry<WeatherScript>::AddALScripts();
-    ScriptRegistry<ConditionScript>::AddALScripts();
-    ScriptRegistry<TransportScript>::AddALScripts();
-    ScriptRegistry<AchievementCriteriaScript>::AddALScripts();
+    // Add all scripts that must be loaded after db/maps. Each registry's
+    // after-load list is independent, so iteration order does not matter.
+    Acore::for_each<ScriptRegistryTypes>([]<typename Info>()
+    {
+        if constexpr (Info::PromotedAfterDbLoad)
+            ScriptRegistry<typename Info::type>::AddALScripts();
+    });
 
     FillSpellSummary();
 
