@@ -113,54 +113,15 @@ void ScriptMgr::Initialize()
 
 void ScriptMgr::Unload()
 {
-    SCR_CLEAR<AccountScript>();
-    SCR_CLEAR<AchievementCriteriaScript>();
-    SCR_CLEAR<AchievementScript>();
-    SCR_CLEAR<AllCreatureScript>();
-    SCR_CLEAR<AllGameObjectScript>();
-    SCR_CLEAR<AllItemScript>();
-    SCR_CLEAR<AllMapScript>();
-    SCR_CLEAR<AreaTriggerScript>();
-    SCR_CLEAR<ArenaScript>();
-    SCR_CLEAR<ArenaTeamScript>();
-    SCR_CLEAR<AuctionHouseScript>();
-    SCR_CLEAR<BGScript>();
-    SCR_CLEAR<BattlegroundMapScript>();
-    SCR_CLEAR<BattlegroundScript>();
-    SCR_CLEAR<CommandSC>();
-    SCR_CLEAR<CommandScript>();
-    SCR_CLEAR<ConditionScript>();
-    SCR_CLEAR<CreatureScript>();
-    SCR_CLEAR<DatabaseScript>();
-    SCR_CLEAR<DynamicObjectScript>();
-    SCR_CLEAR<ALEScript>();
-    SCR_CLEAR<FormulaScript>();
-    SCR_CLEAR<GameEventScript>();
-    SCR_CLEAR<GameObjectScript>();
-    SCR_CLEAR<GlobalScript>();
-    SCR_CLEAR<GroupScript>();
-    SCR_CLEAR<GuildScript>();
-    SCR_CLEAR<InstanceMapScript>();
-    SCR_CLEAR<ItemScript>();
-    SCR_CLEAR<LootScript>();
-    SCR_CLEAR<MailScript>();
-    SCR_CLEAR<MiscScript>();
-    SCR_CLEAR<MovementHandlerScript>();
-    SCR_CLEAR<OutdoorPvPScript>();
-    SCR_CLEAR<PetScript>();
-    SCR_CLEAR<PlayerScript>();
-    SCR_CLEAR<PlayerbotScript>();
-    SCR_CLEAR<ServerScript>();
-    SCR_CLEAR<SpellSC>();
-    SCR_CLEAR<SpellScriptLoader>();
-    SCR_CLEAR<TicketScript>();
-    SCR_CLEAR<TransportScript>();
-    SCR_CLEAR<UnitScript>();
-    SCR_CLEAR<VehicleScript>();
-    SCR_CLEAR<WeatherScript>();
-    SCR_CLEAR<WorldMapScript>();
-    SCR_CLEAR<WorldObjectScript>();
-    SCR_CLEAR<WorldScript>();
+    Acore::for_each<ScriptRegistryTypes>([]<typename Info>()
+    {
+        for (auto const& [scriptID, script] : ScriptRegistry<typename Info::type>::ScriptPointerList)
+        {
+            delete script;
+        }
+
+        ScriptRegistry<typename Info::type>::ScriptPointerList.clear();
+    });
 
     delete[] SpellSummary;
 }
@@ -201,44 +162,16 @@ void ScriptMgr::CheckIfScriptsInDatabaseExist()
     {
         if (uint32 sid = sObjectMgr->GetScriptId(scriptName))
         {
-            if (!ScriptRegistry<SpellScriptLoader>::GetScriptById(sid) &&
-                !ScriptRegistry<ServerScript>::GetScriptById(sid) &&
-                !ScriptRegistry<WorldScript>::GetScriptById(sid) &&
-                !ScriptRegistry<FormulaScript>::GetScriptById(sid) &&
-                !ScriptRegistry<WorldMapScript>::GetScriptById(sid) &&
-                !ScriptRegistry<InstanceMapScript>::GetScriptById(sid) &&
-                !ScriptRegistry<BattlegroundMapScript>::GetScriptById(sid) &&
-                !ScriptRegistry<ItemScript>::GetScriptById(sid) &&
-                !ScriptRegistry<CreatureScript>::GetScriptById(sid) &&
-                !ScriptRegistry<GameObjectScript>::GetScriptById(sid) &&
-                !ScriptRegistry<AreaTriggerScript>::GetScriptById(sid) &&
-                !ScriptRegistry<BattlegroundScript>::GetScriptById(sid) &&
-                !ScriptRegistry<OutdoorPvPScript>::GetScriptById(sid) &&
-                !ScriptRegistry<CommandScript>::GetScriptById(sid) &&
-                !ScriptRegistry<WeatherScript>::GetScriptById(sid) &&
-                !ScriptRegistry<AuctionHouseScript>::GetScriptById(sid) &&
-                !ScriptRegistry<ConditionScript>::GetScriptById(sid) &&
-                !ScriptRegistry<VehicleScript>::GetScriptById(sid) &&
-                !ScriptRegistry<DynamicObjectScript>::GetScriptById(sid) &&
-                !ScriptRegistry<TransportScript>::GetScriptById(sid) &&
-                !ScriptRegistry<AchievementCriteriaScript>::GetScriptById(sid) &&
-                !ScriptRegistry<PlayerScript>::GetScriptById(sid) &&
-                !ScriptRegistry<GuildScript>::GetScriptById(sid) &&
-                !ScriptRegistry<BGScript>::GetScriptById(sid) &&
-                !ScriptRegistry<AchievementScript>::GetScriptById(sid) &&
-                !ScriptRegistry<ArenaTeamScript>::GetScriptById(sid) &&
-                !ScriptRegistry<SpellSC>::GetScriptById(sid) &&
-                !ScriptRegistry<MiscScript>::GetScriptById(sid) &&
-                !ScriptRegistry<PetScript>::GetScriptById(sid) &&
-                !ScriptRegistry<CommandSC>::GetScriptById(sid) &&
-                !ScriptRegistry<ArenaScript>::GetScriptById(sid) &&
-                !ScriptRegistry<GroupScript>::GetScriptById(sid) &&
-                !ScriptRegistry<DatabaseScript>::GetScriptById(sid) &&
-                !ScriptRegistry<PlayerbotScript>::GetScriptById(sid) &&
-                !ScriptRegistry<TicketScript>::GetScriptById(sid))
-                {
-                    LOG_ERROR("sql.sql", "Script named '{}' is assigned in the database, but has no code!", scriptName);
-                }
+            bool const hasRegisteredScript = Acore::any_of<ScriptRegistryTypes>([sid]<typename Info>()
+            {
+                if constexpr (Info::LegacyDbValidationCandidate)
+                    return ScriptRegistry<typename Info::type>::GetScriptById(sid) != nullptr;
+
+                return false;
+            });
+
+            if (!hasRegisteredScript)
+                LOG_ERROR("sql.sql", "Script named '{}' is assigned in the database, but has no code!", scriptName);
         }
     }
 }
