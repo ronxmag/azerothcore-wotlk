@@ -10,7 +10,7 @@
  #define _SOURCE_DIRECTORY          R"(@CMAKE_SOURCE_DIR@)"
  #define _BUILD_DIRECTORY           R"(@BUILDDIR@)"
  #define _MYSQL_EXECUTABLE          R"(@MYSQL_EXECUTABLE@)"
- #define AC_COMPANYNAME_STR         "GodsWoW powered by DecrypteD"
+ #define AC_COMPANYNAME_STR         "DarkMajesty powered by DecrypteD"
  #define AC_LEGALCOPYRIGHT_STR      "(c)2016-@rev_year@ DarkUNIX"
  #define AC_FILEVERSION             0,0,0
  #define AC_FILEVERSION_STR         "@rev_hash@ @rev_date@ (@rev_branch@ branch)"
