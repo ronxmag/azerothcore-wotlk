@@ -180,7 +180,7 @@ Database.Reconnect.Attempts = 20
 #        Example:     "@prefix@\home\youruser\azerothcore\data"
 #        Default:     "."
 
-DataDir = "/home/acore/wotlk/run/etc"
+DataDir = "/home/imncadsii/wotlk/run/etc"
 
 #
 #    LogsDir
@@ -190,7 +190,7 @@ DataDir = "/home/acore/wotlk/run/etc"
 #        Example:     "/home/youruser/azerothcore/logs"
 #        Default:     "" - (Log files will be stored in the current path)
 
-LogsDir = "/home/acore/wotlk/run/bin"
+LogsDir = "/home/imncadsii/wotlk/run/bin"
 
 #
 #    TempDir
@@ -247,7 +247,7 @@ MySQLExecutable = ""
 #        Example:     "./world.pid" - (Enabled)
 #        Default:     ""            - (Disabled)
 
-PidFile = "/home/acore/wotlk/run/bin/worldserver.pid"
+PidFile = "/home/imncadsii/wotlk/run/bin/worldserver.pid"
 
 #
 ###################################################################################################
@@ -581,7 +581,7 @@ MinRecordUpdateTimeDiff = 100
 #    IPLocationFile
 #        Description: The path to your IP2Location database CSV file.
 #        Example:     "C:/acore/IP2LOCATION-LITE-DB1.CSV"
-#                     "/home/acore/IP2LOCATION-LITE-DB1.CSV"
+#                     "/home/imncadsii/IP2LOCATION-LITE-DB1.CSV"
 #        Default:     "" - (Disabled)
 
 IPLocationFile = ""
