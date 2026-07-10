@@ -29,7 +29,7 @@ void Acore::Banner::Show(std::string_view applicationName, void(*log)(std::strin
 	log(" ██║   ██║██║   ██║██║  ██║╚════██║██║███╗██║██║   ██║██║███╗██║");
 	log(" ╚██████╔╝╚██████╔╝██████╔╝███████║╚███╔███╔╝╚██████╔╝╚███╔███╔╝");
 	log("  ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝ ╚══╝╚══╝  ╚═════╝  ╚══╝╚══╝");
-	log("     GodsWoW Online 3.3.5a  -  www.godswow.org\n");
+	log("     Dark Majesty 3.3.5a  -  www.darkmajesty.org\n");
 
     if (logExtraInfo)
     {
