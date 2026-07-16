@@ -541,12 +541,17 @@ void WorldSession::HandleCharCreateOpcode(WorldPacket& recvData)
                             return;
                         }
 
-                        // Check name uniqueness in the same step as saving to database
-                        if (sCharacterCache->GetCharacterGuidByName(createInfo->Name))
-                        {
-                            SendCharCreate(CHAR_CREATE_NAME_IN_USE);
-                            return;
-                        }
+            if (checkDeathKnightReqs)
+            {
+                if (!deathKnightFlagAlreadySet && hasHeroicReqLevel)
+                    UpdateAccountFlag(ACCOUNT_FLAG_DEATH_KNIGHT_OK);
+
+                if (!hasHeroicReqLevel)
+                {
+                    SendCharCreate(CHAR_CREATE_LEVEL_REQUIREMENT);
+                    return;
+                }
+            }
 
                         std::shared_ptr<Player> newChar(new Player(this), [](Player* ptr)
                             {
