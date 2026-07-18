@@ -55,9 +55,7 @@ jobs:
             C:\tools\mysql\current
           key: winbuild-deps:boost-1.87.0:mysql-8.4.9
       - name: Configure OS
-        shell: bash
-        env:
-          CONTINUOUS_INTEGRATION: true
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
 
