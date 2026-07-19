@@ -278,7 +278,7 @@ public:
         else
             handler->PSendSysMessage("Connected players: {}. Characters in world: {}. Queue: {}.", playerCount, playerCount, queuedSessionCount);
 
-        handler->PSendSysMessage("Connection peak: {}.", connPeak);
+        handler->PSendSysMessage("Connection peak: {}.", playerCount);
         handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_SECURITY, uint32(sWorld->GetPlayerSecurityLimit()));
         handler->PSendSysMessage(LANG_UPTIME, secsToTimeString(GameTime::GetUptime().count()));
         handler->PSendSysMessage("Update time diff: {}ms. Last {} diffs summary:", sWorldUpdateTime.GetLastUpdateTime(), sWorldUpdateTime.GetDatasetSize());
