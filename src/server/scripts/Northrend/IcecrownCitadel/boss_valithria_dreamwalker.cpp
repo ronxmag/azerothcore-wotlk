@@ -516,7 +516,16 @@ public:
             if (instance->GetBossState(DATA_VALITHRIA_DREAMWALKER) != DONE)
                 instance->SetBossState(DATA_VALITHRIA_DREAMWALKER, NOT_STARTED);
             me->SetReactState(REACT_PASSIVE);
-            checkTimer = 5000;
+            summons.DespawnAll();
+
+            me->SummonCreatureGroup(SUMMON_GROUP_ALL);
+            if (Is25ManRaid())
+                me->SummonCreatureGroup(SUMMON_GROUP_25);
+            else
+                me->SummonCreatureGroup(SUMMON_GROUP_10);
+
+            EntryCheckPredicate pred(NPC_RISEN_ARCHMAGE);
+            summons.DoAction(ACTION_SETUP_ARCHMAGES, pred);
         }
 
         void JustEngagedWith(Unit* target) override
