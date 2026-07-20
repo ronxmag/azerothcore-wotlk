@@ -142,23 +142,20 @@ enum Events
 
 enum Actions
 {
-    ACTION_ENTER_COMBAT = 1,
-    MISSED_PORTALS      = 2,
-    ACTION_DEATH        = 3,
+    ACTION_ENTER_COMBAT    = 1,
+    MISSED_PORTALS         = 2,
+    ACTION_DEATH           = 3,
+    ACTION_SETUP_ARCHMAGES = 4,
+};
+
+enum SummonGroups
+{
+    SUMMON_GROUP_ALL = 1,
+    SUMMON_GROUP_10  = 2,
+    SUMMON_GROUP_25  = 3,
 };
 
 Position const ValithriaSpawnPos = {4210.813f, 2484.443f, 364.9558f, 0.01745329f};
-
-class RisenArchmageCheck
-{
-public:
-    // look for all permanently spawned Risen Archmages that are not yet in combat
-    bool operator()(Creature* creature)
-    {
-        return creature->IsAlive() && creature->GetEntry() == NPC_RISEN_ARCHMAGE &&
-               creature->GetSpawnId() && !creature->IsInCombat();
-    }
-};
 
 struct ManaVoidSelector
 {
@@ -252,12 +249,8 @@ public:
                 creature->DespawnOrUnsummon();
                 return;
             case NPC_RISEN_ARCHMAGE:
-                if (!creature->GetSpawnId())
-                {
-                    creature->DespawnOrUnsummon();
-                    return;
-                }
-                break;
+                creature->DespawnOrUnsummon();
+                return;
             default:
                 return;
         }
@@ -551,12 +544,8 @@ public:
             if (Creature* lichKing = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_VALITHRIA_LICH_KING)))
                 lichKing->AI()->DoAction(ACTION_ENTER_COMBAT);
 
-            std::list<Creature*> archmages;
-            RisenArchmageCheck check;
-            Acore::CreatureListSearcher<RisenArchmageCheck> searcher(me, archmages, check);
-            Cell::VisitObjects(me, searcher, 100.0f);
-            for (std::list<Creature*>::iterator itr = archmages.begin(); itr != archmages.end(); ++itr)
-                (*itr)->AI()->DoAction(ACTION_ENTER_COMBAT);
+            EntryCheckPredicate pred(NPC_RISEN_ARCHMAGE);
+            summons.DoAction(ACTION_ENTER_COMBAT, pred);
         }
 
         void AttackStart(Unit* target) override
