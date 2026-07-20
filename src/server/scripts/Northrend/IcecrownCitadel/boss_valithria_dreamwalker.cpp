@@ -746,8 +746,10 @@ public:
 
         void DoAction(int32 action) override
         {
-            if (action == ACTION_ENTER_COMBAT && !me->IsInCombat())
-                me->SetInCombatWithZone();
+            if (action == ACTION_ENTER_COMBAT)
+                DoZoneInCombat();
+            else if (action == ACTION_SETUP_ARCHMAGES)
+                _isInitialArchmage = true;
         }
 
         void JustSummoned(Creature* summon) override
