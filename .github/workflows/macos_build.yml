@@ -11,6 +11,8 @@ on:
       - "test-staging"
 
 concurrency:
+  # One concurrency group per workflow + ref (matches the other build workflows).
+  # PRs cancel superseded runs; branch pushes are isolated by ref.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
