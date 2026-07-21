@@ -961,13 +961,7 @@ SkillRaceClassInfoEntry const* GetSkillRaceClassInfo(uint32 skill, uint8 race, u
     return nullptr;
 }
 
-EmotesTextSoundEntry const* FindTextSoundEmoteFor(uint32 emote, uint32 race, uint32 gender)
-{
-    auto itr = sEmotesTextSoundMap.find(EmotesTextSoundKey(emote, race, gender));
-    return itr != sEmotesTextSoundMap.end() ? itr->second : nullptr;
-}
-
-const std::vector<SkillLineAbilityEntry const*>& GetSkillLineAbilitiesBySkillLine(uint32 skillLine)
+std::vector<SkillLineAbilityEntry const*> const& GetSkillLineAbilitiesBySkillLine(uint32 skillLine)
 {
     auto it = sSkillLineAbilityIndexBySkillLine.find(skillLine);
     if (it == sSkillLineAbilityIndexBySkillLine.end())
