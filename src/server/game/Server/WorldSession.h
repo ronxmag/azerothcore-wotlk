@@ -28,6 +28,7 @@
 #include "CircularBuffer.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
+#include "Duration.h"
 #include "GossipDef.h"
 #include "QueryHolder.h"
 #include "Packet.h"
@@ -424,6 +425,7 @@ public:
     bool IsTrialAccount() const;
     bool IsInternetGameRoomAccount() const;
     bool IsRecurringBillingAccount() const;
+    bool IsAffectedByCAIS() const;
 
     uint8 GetBillingPlanFlags() const;
 
@@ -501,6 +503,16 @@ public:
 
     /// Session in auth.queue currently
     void SetInQueue(bool state) { m_inQueue = state; }
+
+    // Playtime limit
+    Seconds GetCreateTime() const { return _createTime; }
+    // Measured from session creation (authentication), so login queue and character select count
+    // toward the limits. Matches the VMaNGOS behaviour this is ported from.
+    Seconds GetConsecutivePlayTime(Seconds now) const { return (now - _createTime) + _previousPlayTime; }
+    Seconds GetPreviousPlayedTime() const { return _previousPlayTime; }
+    void SetPreviousPlayedTime(Seconds playedTime) { _previousPlayTime = playedTime; }
+    void CheckPlayedTimeLimit(Seconds now);
+    void SendPlayTimeWarning(PlayTimeFlag flag, int32 playTimeRemaining);
 
     /// Is the user engaged in a log out process?
     bool isLogingOut() const { return _logoutTime || m_playerLogout; }
@@ -1283,6 +1295,9 @@ private:
     // Warden
     std::unique_ptr<Warden> _warden;                    // Remains nullptr if Warden system is not enabled by config
 
+    Seconds _lastUpdateTime;                            // last time session was updated by world
+    Seconds _createTime;                                // when session was created
+    Seconds _previousPlayTime;                          // play time from previous session less than 5 hours ago
     time_t _logoutTime;
     bool m_inQueue;                                     // session wait in auth.queue
     bool m_playerLoading;                               // code processed in LoginPlayer
