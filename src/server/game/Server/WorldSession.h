@@ -289,18 +289,18 @@ enum CharterTypes
     ARENA_TEAM_CHARTER_5v5_TYPE                   = 5
 };
 
-class LoginQueryHolder : public CharacterDatabaseQueryHolder
+constexpr Seconds PLAY_TIME_LIMIT_APPROACHING_PARTIAL = Hours(2) + Minutes(30);
+constexpr Seconds PLAY_TIME_LIMIT_PARTIAL             = Hours(3);
+constexpr Seconds PLAY_TIME_LIMIT_APPROACHING_FULL    = Hours(4) + Minutes(30);
+constexpr Seconds PLAY_TIME_LIMIT_FULL                = Hours(5);
+
+enum PlayTimeFlag : uint32
 {
-    private:
-        uint32 m_accountId;
-        ObjectGuid m_guid;
-
-    public:
-        LoginQueryHolder(uint32 accountId, ObjectGuid guid);
-
-        ObjectGuid GetGuid() const { return m_guid; }
-        uint32 GetAccountId() const { return m_accountId; }
-        bool Initialize();
+    PTF_APPROACHING_PARTIAL_PLAY_TIME = 0x1000,
+    PTF_APPROACHING_NO_PLAY_TIME      = 0x2000,
+    PTF_UNK_1                         = 0x20000000,
+    PTF_UNK_2                         = 0x40000000,
+    PTF_UNHEALTHY_TIME                = 0x80000000,
 };
 
 //class to deal with packet processing
