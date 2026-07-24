@@ -158,7 +158,47 @@ enum Spells
     SPELL_ROCKET_LAUNCH_UNDEAD = 71786,
 
     // Invisible Stalker (Float, Uninteractible, LargeAOI)
-    SPELL_SOUL_MISSILE = 72585,
+    SPELL_SOUL_MISSILE              = 72585,
+
+    // Empowering Blood Orb
+    SPELL_EMPOWERED_BLOOD_2         = 70232,
+    SPELL_EMPOWERED_BLOOD_3         = 70304,
+    SPELL_EMPOWERED_BLOOD_4         = 70320,
+    SPELL_ORB_CONTROLLER_ACTIVE     = 70293,
+
+    // Darkfallen Generic
+    SPELL_BLOOD_ORB_VISUAL          = 72099,
+    SPELL_SIPHON_ESSENCE            = 70299,
+
+    // Darkfallen Blood Knight
+    SPELL_VAMPIRIC_AURA             = 71736,
+    SPELL_BLOOD_MIRROR              = 70450,
+    SPELL_BLOOD_MIRROR_2            = 70451,
+    SPELL_BLOOD_MIRROR_DAMAGE_SHARE = 70445,
+    SPELL_UNHOLY_STRIKE             = 70437,
+
+    // Darkfallen Noble
+    SPELL_SHADOW_BOLT               = 72960,
+    SPELL_CHAINS_OF_SHADOW          = 70645,
+
+    // Darkfallen Archmage
+    SPELL_FIREBALL                  = 70409,
+    SPELL_AMPLIFY_MAGIC             = 70408,
+    SPELL_BLAST_WAVE                = 70407,
+    SPELL_POLYMORPH_ALLY            = 72106,
+    SPELL_POLYMORPH                 = 70410,
+
+    // Darkfallen Advisor
+    SPELL_LICH_SLAP                 = 72057,
+    SPELL_SHROUD_OF_SPELL_WARDING   = 72066,
+
+    // Vampiric Fiend
+    SPELL_DISEASE_CLOUD             = 41290,
+    SPELL_LEECHING_ROOT             = 70671,
+
+    // Darkfallen Tactician
+    SPELL_SHADOWSTEP                = 70431,
+    SPELL_BLOOD_SAP                 = 70432
 };
 
 // Helper defines
