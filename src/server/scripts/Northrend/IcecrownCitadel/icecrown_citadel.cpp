@@ -295,17 +295,21 @@ enum EventTypes
 
 enum DataTypesICC
 {
-    DATA_DAMNED_KILLS = 1,
+    DATA_DAMNED_KILLS       = 1,
+    DATA_GUID
 };
 
 enum Actions
 {
     // Sister Svalna
-    ACTION_KILL_CAPTAIN = 1,
-    ACTION_START_GAUNTLET = 2,
-    ACTION_RESURRECT_CAPTAINS = 3,
-    ACTION_CAPTAIN_DIES = 4,
-    ACTION_RESET_EVENT = 5,
+    ACTION_KILL_CAPTAIN         = 1,
+    ACTION_START_GAUNTLET       = 2,
+    ACTION_RESURRECT_CAPTAINS   = 3,
+    ACTION_CAPTAIN_DIES         = 4,
+    ACTION_RESET_EVENT          = 5,
+    ACTION_SIPHON_INTERRUPTED   = 6,
+    ACTION_EVADE                = 7,
+    ACTION_COMBAT               = 8
 };
 
 enum EventIds
