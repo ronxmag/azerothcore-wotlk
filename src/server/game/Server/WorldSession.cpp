@@ -885,12 +885,9 @@ void WorldSession::LogoutPlayer(bool save, bool redirecting)
         LOG_DEBUG("network", "SESSION: Sent SMSG_LOGOUT_COMPLETE Message");
 
         //! Since each account can only have one online character at any given time, ensure all characters for active account are marked as offline
-        if (!redirecting)
-        {
-            CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_ACCOUNT_ONLINE);
-            stmt->SetData(0, GetAccountId());
-            CharacterDatabase.Execute(stmt);
-        }
+        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CharacterDatabaseStatements(statementIndex));
+        stmt->SetData(0, statementParam);
+        CharacterDatabase.Execute(stmt);
     }
 
     m_playerLogout = false;
