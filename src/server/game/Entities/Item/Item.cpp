@@ -26,6 +26,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "StringConvert.h"
+#include "TC9Sidecar.h"
 #include "Tokenize.h"
 #include "WorldPacket.h"
 
@@ -348,7 +349,7 @@ void Item::SaveToDB(CharacterDatabaseTransaction trans)
                 uint8 index = 0;
                 CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(uState == ITEM_NEW ? CHAR_REP_ITEM_INSTANCE : CHAR_UPD_ITEM_INSTANCE);
                 stmt->SetData(  index, GetEntry());
-                stmt->SetData(++index, GetOwnerGUID().GetCounter());
+                stmt->SetData(++index, GetOwnerGUID().GetRawValue());
                 stmt->SetData(++index, GetGuidValue(ITEM_FIELD_CREATOR).GetCounter());
                 stmt->SetData(++index, GetGuidValue(ITEM_FIELD_GIFTCREATOR).GetCounter());
                 stmt->SetData(++index, GetCount());
@@ -381,7 +382,7 @@ void Item::SaveToDB(CharacterDatabaseTransaction trans)
                 if ((uState == ITEM_CHANGED) && IsWrapped())
                 {
                     stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_GIFT_OWNER);
-                    stmt->SetData(0, GetOwnerGUID().GetCounter());
+                    stmt->SetData(0, GetOwnerGUID().GetRawValue());
                     stmt->SetData(1, guid);
                     trans->Append(stmt);
                 }
@@ -1090,7 +1091,7 @@ void Item::SendTimeUpdate(Player* owner)
     owner->SendDirectMessage(&data);
 }
 
-Item* Item::CreateItem(uint32 item, uint32 count, Player const* player, bool clone, uint32 randomPropertyId, bool temp)
+Item* Item::CreateItem(uint32 item, uint32 count, Player const* player, bool clone, uint32 randomPropertyId)
 {
     if (count < 1)
         return nullptr;                                        //don't create item at zero count
@@ -1114,9 +1115,14 @@ Item* Item::CreateItem(uint32 item, uint32 count, Player const* player, bool clo
         delete pItem;
         return nullptr;
     }
-    else
-        ABORT();
-    return nullptr;
+
+    pItem->SetCount(count);
+    if (!clone)
+        pItem->SetItemRandomProperties(randomPropertyId ? randomPropertyId : Item::GenerateItemRandomPropertyId(item));
+    else if (randomPropertyId)
+        pItem->SetItemRandomProperties(randomPropertyId);
+
+    return pItem;
 }
 
 Item* Item::CloneItem(uint32 count, Player const* player) const
@@ -1280,15 +1286,10 @@ void Item::ClearSoulboundTradeable(Player* currentOwner)
 
 bool Item::CheckSoulboundTradeExpire()
 {
-    // we have to check the owner for mod_playerbots since bots programically call methods like DestroyItem, 
-    // MoveItemToMail, DestroyItemCount which do not handle soulboundTradeable clearing.
-    Player* owner = GetOwner();
-    if (!owner)
-        return true; // remove from tradeable list
-    
-    if (GetUInt32Value(ITEM_FIELD_CREATE_PLAYED_TIME) + 2 * HOUR < owner->GetTotalPlayedTime())
+    // called from owner's update - GetOwner() MUST be valid
+    if (GetUInt32Value(ITEM_FIELD_CREATE_PLAYED_TIME) + 2 * HOUR < GetOwner()->GetTotalPlayedTime())
     {
-        ClearSoulboundTradeable(owner);
+        ClearSoulboundTradeable(GetOwner());
         return true; // remove from tradeable list
     }
 
