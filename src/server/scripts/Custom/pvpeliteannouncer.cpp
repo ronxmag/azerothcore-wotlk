@@ -65,7 +65,20 @@ public:
     {
         if (sConfigMgr->GetOption("PVPKill.Announcer", true))
         {
-            if (killer->IsPlayer())
+            if (killer == killed)
+            {
+                std::string plr = killed->GetName();
+                std::string creature_n = "SUICIDE!";
+                std::string tag_colour = "7bbef7";
+                std::string plr_colour = "7bbef7";
+                std::string creature_colour = "ff0000";
+                std::ostringstream stream;
+                stream << "|CFF" << tag_colour <<
+                    "|r|cff" << plr_colour << " " << plr <<
+                    "|r died by |CFF" << creature_colour << "" << creature_n << "|r " "WTF!" << "!";
+                sWorldSessionMgr->SendServerMessage(SERVER_MSG_STRING, stream.str().c_str());
+            }
+            else if (killer->IsPlayer())
             {
                 std::string plr = killed->GetName();
                 std::string creature_n = killer->GetName();
