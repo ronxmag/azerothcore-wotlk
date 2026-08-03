@@ -1097,34 +1097,35 @@ Item* Item::CreateItem(uint32 item, uint32 count, Player const* player, bool clo
         return nullptr;                                        //don't create item at zero count
 
     ItemTemplate const* pProto = sObjectMgr->GetItemTemplate(item);
-    if (pProto)
-    {
-        if (count > pProto->GetMaxStackSize())
-            count = pProto->GetMaxStackSize();
-
-        ASSERT_NODEBUGINFO(count != 0 && "pProto->Stackable == 0 but checked at loading already");
-
-        uint16 realmId = DEFAULT_NON_CROSSREALM_REALM_ID;
-        if (sToCloud9Sidecar->IsCrossrealm() && player)
-            realmId = player->GetGUID().GetRealmID();
-        
-        Item* pItem = NewItemOrBag(pProto);
-        uint32 guid = temp ? 0xFFFFFFFF : sObjectMgr->GetGenerator<HighGuid::Item>().Generate();
-        if (pItem->Create(guid, item, player))
-        {
-            pItem->SetCount(count);
-            if (!clone)
-                pItem->SetItemRandomProperties(randomPropertyId ? randomPropertyId : Item::GenerateItemRandomPropertyId(item));
-            else if (randomPropertyId)
-                pItem->SetItemRandomProperties(randomPropertyId);
-            return pItem;
-        }
-        else
-            delete pItem;
-    }
-    else
+    if (!pProto)
         ABORT();
-    return nullptr;
+
+    if (count > pProto->GetMaxStackSize())
+        count = pProto->GetMaxStackSize();
+
+    ASSERT_NODEBUGINFO(count != 0 && "pProto->Stackable == 0 but checked at loading already");
+
+    uint16 realmId = DEFAULT_NON_CROSSREALM_REALM_ID;
+    if (sToCloud9Sidecar->IsCrossrealm() && player)
+        realmId = player->GetGUID().GetRealmID();
+
+    // playerbots: temporary items get a sentinel guid instead of consuming one from the generator
+    uint32 guid = temp ? 0xFFFFFFFF : sObjectMgr->GetGenerator<HighGuid::Item>().Generate(realmId);
+
+    Item* pItem = NewItemOrBag(pProto);
+    if (!pItem->Create(guid, item, player))
+    {
+        delete pItem;
+        return nullptr;
+    }
+
+    pItem->SetCount(count);
+    if (!clone)
+        pItem->SetItemRandomProperties(randomPropertyId ? randomPropertyId : Item::GenerateItemRandomPropertyId(item));
+    else if (randomPropertyId)
+        pItem->SetItemRandomProperties(randomPropertyId);
+
+    return pItem;
 }
 
 Item* Item::CloneItem(uint32 count, Player const* player) const
