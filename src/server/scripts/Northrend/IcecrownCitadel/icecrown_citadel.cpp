@@ -335,14 +335,6 @@ enum CrimsonHallTrashGuids
     GUID_DARKFALLEN_NOBLE        = 201659
 };
 
-enum CrimsonHallTrashGuids
-{
-    GUID_DARKFALLEN_ADVISOR      = 201479,
-    GUID_DARKFALLEN_ARCHMAGE     = 201482,
-    GUID_DARKFALLEN_BLOOD_KNIGHT = 201646,
-    GUID_DARKFALLEN_NOBLE        = 201659
-};
-
 class FrostwingVrykulSearcher
 {
 public:
