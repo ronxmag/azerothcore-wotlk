@@ -388,11 +388,15 @@ void Group::RemoveInvite(Player* player)
     if (!player)
         return;
 
-    m_invitees.erase(player);
+    // mod_playerbots: double invite hack workaround
+    if (player->GetGroupInvite() != this)
+        return;
 
-    // Clear pending invite from current group, Keep an invite from another group.
-    if (player->GetGroupInvite() == this)
-        player->SetGroupInvite(nullptr);
+    auto itr = m_invitees.find(player);
+    if (itr != m_invitees.end())
+        m_invitees.erase(itr);
+
+    player->SetGroupInvite(nullptr);
 }
 
 
