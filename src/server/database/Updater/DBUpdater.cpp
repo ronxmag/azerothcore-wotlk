@@ -302,7 +302,7 @@ bool DBUpdater<T>::Update(DatabaseWorkerPool<T>& pool, std::string_view modulesL
 
     LOG_INFO("sql.updates", "Updating {} database...", DBUpdater<T>::GetTableName());
 
-    Path const sourceDirectory(DBUpdater<T>::GetSourceDirectory());
+    Path const sourceDirectory(info.sourceDirectory);
 
     if (!is_directory(sourceDirectory))
     {
@@ -377,7 +377,7 @@ bool DBUpdater<T>::Update(DatabaseWorkerPool<T>& pool, std::vector<std::string> 
         return false;
     }
 
-    Path const sourceDirectory(DBUpdater<T>::GetSourceDirectory());
+    Path const sourceDirectory(info.sourceDirectory);
     if (!is_directory(sourceDirectory))
     {
         return false;
