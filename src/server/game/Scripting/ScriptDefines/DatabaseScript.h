@@ -52,13 +52,38 @@ public:
      */
     virtual void OnAfterDatabaseLoadCreatureTemplates(std::vector<CreatureTemplate*> /*creatureTemplates*/) { }
 
-    [[nodiscard]] virtual bool OnDatabasesLoading() { return true; }
-    virtual void OnDatabasesKeepAlive() { }
-    virtual void OnDatabasesClosing() { }
-    virtual void OnDatabaseWarnAboutSyncQueries(bool /*apply*/) { }
-    virtual void OnDatabaseSelectIndexLogout(Player* /*player*/, uint32& /*statementIndex*/, uint32& /*statementParam*/) { }
-    virtual void OnDatabaseGetDBRevision(std::string& /*revision*/) { }
+    /**
+     * @brief Called once the core databases are up, so a module can open a database of its own.
+     * Runs before the rest of the world loads, unlike OnAfterDatabasesLoaded which reports the
+     * finished core load.
+     *
+     * @return false to abort startup, e.g. when the module's own database failed to open
+     */
+    [[nodiscard]] virtual bool OnModuleDatabasesLoading() { return true; }
 
+    /**
+     * @brief Called on the world's keep-alive tick, alongside the core pools being pinged.
+     */
+    virtual void OnModuleDatabasesKeepAlive() { }
+
+    /**
+     * @brief Called after the core databases are closed, so a module can close its own.
+     */
+    virtual void OnModuleDatabasesClosing() { }
+
+    /**
+     * @brief Called when the core turns its synchronous-query warning on or off.
+     *
+     * @param apply True when the warning is being enabled
+     */
+    virtual void OnDatabaseWarnAboutSyncQueries(bool /*apply*/) { }
+
+    /**
+     * @brief Called by .server info to collect the revision of a module-owned database.
+     *
+     * @param revisions Revision string to report, keyed by module name
+     */
+    virtual void OnDatabaseGetDBRevision(std::map<std::string, std::string>& /*revisions*/) { }
 };
 
 #endif
