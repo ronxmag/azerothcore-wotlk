@@ -91,6 +91,8 @@ public:
      * @param revisions Revision string to report, keyed by module name
      */
     virtual void OnDatabaseGetDBRevision(std::map<std::string, std::string>& /*revisions*/) { }
+
+    virtual void OnDatabaseSelectIndexLogout(Player* /*player*/, uint32& /*statementIndex*/, uint32& /*statementParam*/) { }
 };
 
 #endif
