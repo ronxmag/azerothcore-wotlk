@@ -19,8 +19,6 @@
 #define SCRIPT_OBJECT_DATABASE_SCRIPT_H_
 
 #include "ScriptObject.h"
-#include <map>
-#include <string>
 #include <vector>
 
 enum DatabaseHook
