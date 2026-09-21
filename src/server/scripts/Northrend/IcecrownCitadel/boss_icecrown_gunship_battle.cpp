@@ -2588,13 +2588,17 @@ public:
             }
         }
 
-        void HandleScript(SpellEffIndex effIndex)
-        {
-            PreventHitDefaultEffect(effIndex);
-            GetCaster()->CastSpell(GetHitUnit()->GetPositionX(), GetHitUnit()->GetPositionY(),
-                GetHitUnit()->GetMapHeight(GetCaster()->GetPhaseMask(), GetHitUnit()->GetPositionX(), GetHitUnit()->GetPositionY(), GetHitUnit()->GetPositionZ()),
-                uint32(GetEffectValue()), TRIGGERED_NONE);
-        }
+    void HandleScript(SpellEffIndex effIndex)
+    {
+        PreventHitDefaultEffect(effIndex);
+
+        Unit* target = GetHitUnit();
+        float x = target->GetPositionX();
+        float y = target->GetPositionY();
+        float z = target->GetMapHeight(x, y, target->GetPositionZ());
+
+        GetCaster()->CastSpell(x, y, z, uint32(GetEffectValue()), TRIGGERED_NONE);
+    }
 
         void Register() override
         {
