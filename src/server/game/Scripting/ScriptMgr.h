@@ -739,6 +739,7 @@ public: /* DatabaseScript */
     void OnModuleDatabasesKeepAlive();
     void OnModuleDatabasesClosing();
     void OnDatabaseWarnAboutSyncQueries(bool apply);
+    void OnDatabaseSelectIndexLogout(Player* player, uint32& statementIndex, uint32& statementParam);
     void OnDatabaseGetDBRevision(std::map<std::string, std::string>& revisions);
 
 public: /* WorldObjectScript */
