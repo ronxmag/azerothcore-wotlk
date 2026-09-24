@@ -1080,7 +1080,6 @@ uint32 Unit::DealDamage(Unit* attacker, Unit* victim, uint32 damage, CleanDamage
             SpellInfo const* spell = (*i)->GetSpellInfo();
 
             uint32 shareDamage = CalculatePct(damage, (*i)->GetAmount());
-            bool const hasSharedDamage = shareDamage != 0;
 
             uint32 shareAbsorb = 0;
             uint32 shareResist = 0;
@@ -1104,10 +1103,6 @@ uint32 Unit::DealDamage(Unit* attacker, Unit* victim, uint32 damage, CleanDamage
             {
                 attacker->SendSpellNonMeleeDamageLog(shareDamageTarget, spell, shareDamage, damageSchoolMask, shareAbsorb, shareResist, damagetype == DIRECT_DAMAGE, 0, false, true);
             }
-
-            // Shared damage is a hostile interaction for its recipient too.
-            if (hasSharedDamage && attacker && !attacker->IsFriendlyTo(shareDamageTarget))
-                attacker->AtTargetAttacked(shareDamageTarget, !spellProto || spellProto->HasInitialAggro());
 
             Unit::DealDamage(attacker, shareDamageTarget, shareDamage, cleanDamage, NODAMAGE, damageSchoolMask, spellProto, false, false, damageSpell);
         }
@@ -1264,7 +1259,7 @@ uint32 Unit::DealDamage(Unit* attacker, Unit* victim, uint32 damage, CleanDamage
 
         if (!victim->IsPlayer())
         {
-            // DoT ticks and passive damage (e.g. Thorns) do not reset leash timer
+            /// @fix: Hack to avoid premature leashing
             if (damagetype != DOT && damage > 0 && !victim->GetOwnerGUID().IsPlayer() && (!spellProto || !spellProto->HasAura(SPELL_AURA_DAMAGE_SHIELD)))
                 victim->ToCreature()->UpdateLeashExtensionTime();
 
@@ -2562,7 +2557,6 @@ void Unit::CalcAbsorbResist(DamageInfo& dmgInfo, bool Splited, uint8 casterLevel
             if (!caster || (caster == victim) || !caster->IsInWorld() || !caster->IsAlive())
                 continue;
 
-            SpellInfo const* splitSpellInfo = (*itr)->GetSpellInfo();
             int32 splitDamage = (*itr)->GetAmount();
 
             // absorb must be smaller than the damage itself
@@ -2602,16 +2596,11 @@ void Unit::CalcAbsorbResist(DamageInfo& dmgInfo, bool Splited, uint8 casterLevel
 
             if (attacker)
             {
-                attacker->SendSpellNonMeleeDamageLog(caster, splitSpellInfo, splitted, schoolMask, splitted_absorb, splitted_resist, false, 0, false, true);
+                attacker->SendSpellNonMeleeDamageLog(caster, (*itr)->GetSpellInfo(), splitted, schoolMask, splitted_absorb, splitted_resist, false, 0, false, true);
             }
 
             CleanDamage cleanDamage = CleanDamage(splitted, 0, BASE_ATTACK, MELEE_HIT_NORMAL);
-
-            // Split damage is a hostile interaction for its recipient too.
-            if (splitDamage && attacker && !attacker->IsFriendlyTo(caster))
-                attacker->AtTargetAttacked(caster, !spellInfo || spellInfo->HasInitialAggro());
-
-            Unit::DealDamage(attacker, caster, splitted, &cleanDamage, DIRECT_DAMAGE, schoolMask, splitSpellInfo, false);
+            Unit::DealDamage(attacker, caster, splitted, &cleanDamage, DIRECT_DAMAGE, schoolMask, (*itr)->GetSpellInfo(), false);
         }
 
         // We're going to call functions which can modify content of the list during iteration over it's elements
@@ -2684,11 +2673,6 @@ void Unit::CalcAbsorbResist(DamageInfo& dmgInfo, bool Splited, uint8 casterLevel
             }
 
             CleanDamage cleanDamage = CleanDamage(splitted, 0, BASE_ATTACK, MELEE_HIT_NORMAL);
-
-            // Split damage is a hostile interaction for its recipient too.
-            if (splitDamage && attacker && !attacker->IsFriendlyTo(caster))
-                attacker->AtTargetAttacked(caster, !spellInfo || spellInfo->HasInitialAggro());
-
             Unit::DealDamage(attacker, caster, splitted, &cleanDamage, DIRECT_DAMAGE, splitSchoolMask, splitSpellInfo, false);
         }
     }
@@ -4346,18 +4330,6 @@ bool Unit::IsHighestExclusiveAuraEffect(SpellInfo const* spellInfo, AuraType aur
             if (!diff)
                 for (int32 i = 0; i < MAX_SPELL_EFFECTS; ++i)
                     diff += int32((auraEffectMask & (1 << i)) >> i) - int32((existingAurEff->GetBase()->GetEffectMask() & (1 << i)) >> i);
-
-            if (!diff && spellInfo->GetFirstRankSpell()->Id != existingAurEff->GetSpellInfo()->GetFirstRankSpell()->Id)
-            {
-                int32 newDuration = spellInfo->GetMaxDuration();
-                int32 existingDuration = existingAurEff->GetBase()->GetMaxDuration();
-                if (newDuration == -1 && existingDuration != -1)
-                    diff = 1;
-                else if (newDuration != -1 && existingDuration == -1)
-                    diff = -1;
-                else
-                    diff = newDuration - existingDuration;
-            }
 
             if (diff > 0)
             {
@@ -7030,7 +7002,6 @@ ReputationRank Unit::GetFactionReactionTo(FactionTemplateEntry const* factionTem
         return REP_FRIENDLY;
     if (factionTemplateEntry->factionFlags & FACTION_TEMPLATE_FLAG_HATES_ALL_EXCEPT_FRIENDS)
         return REP_HOSTILE;
-
     // neutral by default
     return REP_NEUTRAL;
 }
@@ -9806,12 +9777,9 @@ bool Unit::IsImmunedToSpell(SpellInfo const* spellInfo, Unit const* caster, Spel
     // Spells that don't have effectMechanics.
     if (uint32 mechanic = spellInfo->Mechanic)
     {
-        if (!spellInfo->HasAttribute(SPELL_ATTR0_CU_BYPASS_MECHANIC_IMMUNITY))
-        {
-            SpellImmuneContainer const& mechanicList = m_spellImmune[IMMUNITY_MECHANIC];
-            if (mechanicList.count(mechanic) > 0)
-                return true;
-        }
+        SpellImmuneContainer const& mechanicList = m_spellImmune[IMMUNITY_MECHANIC];
+        if (mechanicList.count(mechanic) > 0)
+            return true;
     }
 
     bool immuneToAllEffects = true;
@@ -9885,12 +9853,9 @@ bool Unit::IsImmunedToSpellEffect(SpellInfo const* spellInfo, uint32 index, Worl
 
     if (uint32 mechanic = spellInfo->Effects[index].Mechanic)
     {
-        if (!spellInfo->HasAttribute(SPELL_ATTR0_CU_BYPASS_MECHANIC_IMMUNITY))
-        {
-            auto const& mechanicList = m_spellImmune[IMMUNITY_MECHANIC];
-            if (mechanicList.count(mechanic) > 0)
-                return true;
-        }
+        auto const& mechanicList = m_spellImmune[IMMUNITY_MECHANIC];
+        if (mechanicList.count(mechanic) > 0)
+            return true;
     }
 
     if (!spellInfo->HasAttribute(SPELL_ATTR3_ALWAYS_HIT))
@@ -11210,12 +11175,6 @@ void Unit::AtTargetAttacked(Unit* target, bool canInitialAggro)
 {
     if (!target->IsEngaged() && !canInitialAggro)
         return;
-
-    if (Creature* cTarget = target->ToCreature())
-    {
-        if (!cTarget->GetOwnerGUID().IsPlayer())
-            cTarget->UpdateLeashExtensionTime();
-    }
 
     target->EngageWithTarget(this);
     if (Unit* targetOwner = target->GetCharmerOrOwner())
