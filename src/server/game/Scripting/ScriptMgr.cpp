@@ -121,11 +121,6 @@ ScriptMgr* ScriptMgr::instance()
     return &instance;
 }
 
-PlayerbotScript::PlayerbotScript(const char* name) : ScriptObject(name)
-{
-    ScriptRegistry<PlayerbotScript>::AddScript(this);
-}
-
 void ScriptMgr::Initialize()
 {
     LOG_INFO("server.loading", "> Loading C++ scripts");
