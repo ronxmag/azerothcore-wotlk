@@ -30,6 +30,7 @@
 #include "DatabaseEnv.h"
 #include "Duration.h"
 #include "GossipDef.h"
+#include "QueryHolder.h"
 #include "Packet.h"
 #include "QueryHolder.h"
 #include "SharedDefines.h"
