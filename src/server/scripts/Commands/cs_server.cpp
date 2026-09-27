@@ -273,11 +273,11 @@ public:
 
         handler->PSendSysMessage("{}", GitRevision::GetFullVersion());
         if (!queuedSessionCount)
-            handler->PSendSysMessage("Connected players: {}. Characters in world: {}.", playerCount, playerCount);
+            handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CONNECTED, activeSessionCount, connPeak);
         else
-            handler->PSendSysMessage("Connected players: {}. Characters in world: {}. Queue: {}.", playerCount, playerCount, queuedSessionCount);
+            handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CONNECTED_QUEUE, activeSessionCount, connPeak, queuedSessionCount);
 
-        handler->PSendSysMessage("Connection peak: {}.", playerCount);
+        handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CHARACTERS_IN_WORLD, playerCount, sWorldSessionMgr->GetMaxPlayerCount(), sWorld->GetLifetimeMaxPlayerCount());
         handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_SECURITY, uint32(sWorld->GetPlayerSecurityLimit()));
         handler->PSendSysMessage(LANG_UPTIME, secsToTimeString(GameTime::GetUptime().count()));
         handler->PSendSysMessage("Update time diff: {}ms. Last {} diffs summary:", sWorldUpdateTime.GetLastUpdateTime(), sWorldUpdateTime.GetDatasetSize());
