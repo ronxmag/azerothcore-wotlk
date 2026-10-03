@@ -274,9 +274,9 @@ public:
 
         handler->PSendSysMessage("{}", GitRevision::GetFullVersion());
         if (!queuedSessionCount)
-            handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CONNECTED, activeSessionCount, connPeak);
+            handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CONNECTED, playerCount, playerCount);
         else
-            handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CONNECTED_QUEUE, activeSessionCount, connPeak, queuedSessionCount);
+            handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CONNECTED_QUEUE, playerCount, playerCount, queuedSessionCount);
 
         handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_CHARACTERS_IN_WORLD, playerCount, sWorldSessionMgr->GetMaxPlayerCount(), sWorld->GetLifetimeMaxPlayerCount());
         handler->PSendSysMessage(LANG_COMMAND_SERVER_INFO_SECURITY, uint32(sWorld->GetPlayerSecurityLimit()));
