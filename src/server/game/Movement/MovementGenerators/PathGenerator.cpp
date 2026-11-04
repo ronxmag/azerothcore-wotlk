@@ -770,6 +770,11 @@ void PathGenerator::CreateFilter()
     _filter.setIncludeFlags(includeFlags);
     _filter.setExcludeFlags(excludeFlags);
 
+    // Bots bias their routes away from deep water (swim only when necessary). poly.area == poly.flags ==
+    // NavTerrain, so NAV_WATER doubles as the water area index. Real players and creatures assign no cost.
+    if (isHeadless)
+        _filter.setAreaCost(NAV_WATER, 5.0f);
+
     UpdateFilter();
 }
 
