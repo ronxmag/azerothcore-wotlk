@@ -23,6 +23,8 @@
 #include "MMapMgr.h"
 #include "Map.h"
 #include "Metric.h"
+#include "Player.h"
+#include "WorldSession.h"
 
 // Blades Edge Arena Ropes normalization
 namespace
