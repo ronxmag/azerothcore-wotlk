@@ -756,7 +756,7 @@ void PathGenerator::CreateFilter()
     {
         Creature* creature = (Creature*)_source;
         if (creature->CanWalk())
-            includeFlags |= NAV_GROUND;          // walk
+            includeFlags |= (NAV_GROUND | NAV_GROUND_STEEP);
 
         // creatures don't take environmental damage
         if (creature->CanEnterWater())
