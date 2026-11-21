@@ -859,31 +859,31 @@ public:
             switch (waypointId)
             {
                 // pause pathing until trash pack is cleared
-            case 0:
-                Talk(SAY_CROK_COMBAT_WP_0);
-                if (!_aliveTrash.empty())
-                    SetEscortPaused(true);
-                break;
-            case 1:
-                Talk(SAY_CROK_COMBAT_WP_1);
-                if (!_aliveTrash.empty())
-                    SetEscortPaused(true);
-                break;
-            case 2:
-                if (!_aliveTrash.empty())
-                    SetEscortPaused(true);
-                break;
-            case 4:
-                if (_aliveTrash.empty() && !_handledWP4)
-                {
-                    _handledWP4 = true;
-                    Talk(SAY_CROK_FINAL_WP);
-                    if (Creature* svalna = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_SISTER_SVALNA)))
-                        svalna->AI()->DoAction(ACTION_RESURRECT_CAPTAINS);
-                }
-                break;
-            default:
-                break;
+                case 0:
+                    Talk(SAY_CROK_COMBAT_WP_0);
+                    if (!_aliveTrash.empty())
+                        SetEscortPaused(true);
+                    break;
+                case 1:
+                    Talk(SAY_CROK_COMBAT_WP_1);
+                    if (!_aliveTrash.empty())
+                        SetEscortPaused(true);
+                    break;
+                case 2:
+                    if (!_aliveTrash.empty())
+                        SetEscortPaused(true);
+                    break;
+                case 4:
+                    if (_aliveTrash.empty() && !_handledWP4)
+                    {
+                        _handledWP4 = true;
+                        Talk(SAY_CROK_FINAL_WP);
+                        if (Creature* svalna = _instance->GetCreature(DATA_SISTER_SVALNA))
+                            svalna->AI()->DoAction(ACTION_RESURRECT_CAPTAINS);
+                    }
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -893,24 +893,26 @@ public:
             float minY = 0.0f;
             switch (waypointId)
             {
-            case 0:
-                minY = 2600.0f;
-                break;
-            case 1:
-                minY = 2550.0f;
-                if (Creature* svalna = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_SISTER_SVALNA)))
-                    svalna->AI()->DoAction(ACTION_KILL_CAPTAIN);
-                break;
-            case 2:
-                minY = 2515.0f;
-                if (Creature* svalna = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_SISTER_SVALNA)))
-                    svalna->AI()->DoAction(ACTION_KILL_CAPTAIN);
-                break;
-            case 4:
-                minY = 2475.0f;
-                break;
-            default:
-                break;
+                case 0:
+                    minY = 2600.0f;
+                    break;
+                case 1:
+                    minY = 2550.0f;
+                    if (Creature* svalna = _instance->GetCreature(DATA_SISTER_SVALNA))
+                        svalna->AI()->DoAction(ACTION_KILL_CAPTAIN);
+
+                    break;
+                case 2:
+                    minY = 2515.0f;
+                    if (Creature* svalna = _instance->GetCreature(DATA_SISTER_SVALNA))
+                        svalna->AI()->DoAction(ACTION_KILL_CAPTAIN);
+
+                    break;
+                case 4:
+                    minY = 2475.0f;
+                    break;
+                default:
+                    break;
             }
 
             if (minY)
@@ -992,41 +994,42 @@ public:
 
             switch (_events.ExecuteEvent())
             {
-            case EVENT_ARNATH_INTRO_2:
-                if (Creature* arnath = ObjectAccessor::GetCreature(*me, _instance->GetGuidData(DATA_CAPTAIN_ARNATH)))
-                    arnath->AI()->Talk(SAY_ARNATH_INTRO_2);
-                break;
-            case EVENT_CROK_INTRO_3:
-                Talk(SAY_CROK_INTRO_3);
-                break;
-            case EVENT_START_PATHING:
-                me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
-                me->SetImmuneToAll(false);
-                Start(true);
-                break;
-            case EVENT_SCOURGE_STRIKE:
-                DoCastVictim(SPELL_SCOURGE_STRIKE);
-                _events.ScheduleEvent(EVENT_SCOURGE_STRIKE, 10s, 14s);
-                break;
-            case EVENT_DEATH_STRIKE:
-                if (HealthBelowPct(20))
-                    DoCastVictim(SPELL_DEATH_STRIKE);
-                _events.ScheduleEvent(EVENT_DEATH_STRIKE, 5s, 10s);
-                break;
-            case EVENT_HEALTH_CHECK:
-                if (HealthAbovePct(25))
-                {
-                    me->RemoveAurasDueToSpell(SPELL_ICEBOUND_ARMOR);
-                    _didUnderTenPercentText = false;
-                }
-                else
-                {
-                    Unit::DealHeal(me, me, me->CountPctFromMaxHealth(3));
-                    _events.ScheduleEvent(EVENT_HEALTH_CHECK, 1s);
-                }
-                break;
-            default:
-                break;
+                case EVENT_ARNATH_INTRO_2:
+                    if (Creature* arnath = _instance->GetCreature(DATA_CAPTAIN_ARNATH))
+                        arnath->AI()->Talk(SAY_ARNATH_INTRO_2);
+
+                    break;
+                case EVENT_CROK_INTRO_3:
+                    Talk(SAY_CROK_INTRO_3);
+                    break;
+                case EVENT_START_PATHING:
+                    me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                    me->SetImmuneToAll(false);
+                    Start(true);
+                    break;
+                case EVENT_SCOURGE_STRIKE:
+                    DoCastVictim(SPELL_SCOURGE_STRIKE);
+                    _events.ScheduleEvent(EVENT_SCOURGE_STRIKE, 10s, 14s);
+                    break;
+                case EVENT_DEATH_STRIKE:
+                    if (HealthBelowPct(20))
+                        DoCastVictim(SPELL_DEATH_STRIKE);
+                    _events.ScheduleEvent(EVENT_DEATH_STRIKE, 5s, 10s);
+                    break;
+                case EVENT_HEALTH_CHECK:
+                    if (HealthAbovePct(25))
+                    {
+                        me->RemoveAurasDueToSpell(SPELL_ICEBOUND_ARMOR);
+                        _didUnderTenPercentText = false;
+                    }
+                    else
+                    {
+                        Unit::DealHeal(me, me, me->CountPctFromMaxHealth(3));
+                        _events.ScheduleEvent(EVENT_HEALTH_CHECK, 1s);
+                    }
+                    break;
+                default:
+                    break;
             }
 
             DoMeleeAttackIfReady();
